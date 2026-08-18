@@ -1,7 +1,7 @@
 #!/bin/bash
-# Start Pixelle-Video Web UI
+# Start Trendlume Web UI
 
-echo "🚀 Starting Pixelle-Video Web UI..."
+echo "🚀 Starting Trendlume Web UI..."
 echo ""
 
 # Start Streamlit

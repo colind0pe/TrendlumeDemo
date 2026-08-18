@@ -1,4 +1,4 @@
-# Pixelle-Video Docker Image
+# Trendlume Docker Image
 # Based on Python 3.11 slim for smaller image size
 
 FROM python:3.11-slim
@@ -39,9 +39,8 @@ ENV PATH="/root/.local/bin:$PATH"
 RUN uv --version
 
 # Copy dependency files and source code for building
-# Note: pixelle_video is needed for hatchling to build the package
 COPY pyproject.toml uv.lock README.md ./
-COPY pixelle_video ./pixelle_video
+COPY trendlume ./trendlume
 
 # Create virtual environment and install dependencies
 # Use -i flag to specify mirror when USE_CN_MIRROR=true
@@ -74,4 +73,3 @@ EXPOSE 8000 8501
 
 # Default command (can be overridden in docker-compose)
 CMD ["uv", "run", "python", "api/app.py"]
-

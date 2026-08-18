@@ -39,15 +39,15 @@ def init_i18n():
     set_language(st.session_state.language)
 
 
-def get_pixelle_video():
+def get_trendlume():
     """
-    Get initialized Pixelle-Video instance with proper caching and cleanup
+    Get initialized Trendlume instance with proper caching and cleanup
     
     Uses st.session_state to cache the instance per user session.
     ComfyKit is lazily initialized and automatically recreated on config changes.
     """
-    from pixelle_video.service import PixelleVideoCore
-    from pixelle_video.config import config_manager
+    from trendlume.service import TrendlumeCore
+    from trendlume.config import config_manager
     
     # Compute config hash for change detection
     import hashlib
@@ -59,31 +59,31 @@ def get_pixelle_video():
     
     # Check if we need to create or recreate core instance
     need_recreate = False
-    if 'pixelle_video' not in st.session_state:
+    if 'trendlume' not in st.session_state:
         need_recreate = True
-        logger.info("Creating new PixelleVideoCore instance (first time)")
-    elif st.session_state.get('pixelle_video_config_hash') != config_hash:
+        logger.info("Creating new TrendlumeCore instance (first time)")
+    elif st.session_state.get('trendlume_config_hash') != config_hash:
         need_recreate = True
-        logger.info("Configuration changed, recreating PixelleVideoCore instance")
+        logger.info("Configuration changed, recreating TrendlumeCore instance")
         # Cleanup old instance
-        old_core = st.session_state.pixelle_video
+        old_core = st.session_state.trendlume
         try:
             run_async(old_core.cleanup())
         except Exception as e:
-            logger.warning(f"Failed to cleanup old PixelleVideoCore: {e}")
+            logger.warning(f"Failed to cleanup old TrendlumeCore: {e}")
     
     if need_recreate:
         # Create and initialize new instance
-        pixelle_video = PixelleVideoCore()
-        run_async(pixelle_video.initialize())
+        trendlume = TrendlumeCore()
+        run_async(trendlume.initialize())
         
         # Cache in session state
-        st.session_state.pixelle_video = pixelle_video
-        st.session_state.pixelle_video_config_hash = config_hash
-        logger.info("✅ PixelleVideoCore initialized and cached")
+        st.session_state.trendlume = trendlume
+        st.session_state.trendlume_config_hash = config_hash
+        logger.info("✅ TrendlumeCore initialized and cached")
     else:
-        pixelle_video = st.session_state.pixelle_video
-        logger.debug("Reusing cached PixelleVideoCore instance")
+        trendlume = st.session_state.trendlume
+        logger.debug("Reusing cached TrendlumeCore instance")
     
-    return pixelle_video
+    return trendlume
 

@@ -1,3 +1,15 @@
+# Copyright (C) 2025 AIDC-AI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Helpers for exposing direct API media models in Streamlit pipeline UIs."""
 
 import os
@@ -56,7 +68,7 @@ def workflow_select_help() -> str:
 
 
 def list_local_media_workflows(
-    pixelle_video: Any,
+    trendlume: Any,
     media_type: str,
     source: str,
     key_contains: str | None = None,
@@ -66,7 +78,7 @@ def list_local_media_workflows(
     try:
         workflows = []
         seen_keys = set()
-        for workflow in pixelle_video.media.list_workflows():
+        for workflow in trendlume.media.list_workflows():
             key = workflow.get("key") or workflow.get("path") or ""
             if not key or key.startswith("api/"):
                 continue
@@ -97,7 +109,7 @@ def list_local_media_workflows(
 
         if key_prefix:
             try:
-                from pixelle_video.utils.os_util import get_resource_path, list_resource_files
+                from trendlume.utils.os_util import get_resource_path, list_resource_files
 
                 for filename in list_resource_files("workflows", source):
                     if not filename.startswith(key_prefix) or not filename.endswith(".json"):
@@ -123,13 +135,13 @@ def list_local_media_workflows(
 
 
 def list_api_media_workflows(
-    pixelle_video: Any,
+    trendlume: Any,
     media_type: str,
     required_adapter_abilities: list[str] | tuple[str, ...] | set[str] | None = None,
     verified_only: bool = False,
 ) -> list[dict]:
     """List API-backed media workflows in the same option shape used by UIs."""
-    api_media = getattr(pixelle_video, "api_media", None)
+    api_media = getattr(trendlume, "api_media", None)
     if api_media is None:
         return []
 

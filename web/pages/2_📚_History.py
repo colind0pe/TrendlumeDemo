@@ -28,14 +28,14 @@ if str(_project_root) not in sys.path:
 import streamlit as st
 from loguru import logger
 
-from web.state.session import init_session_state, init_i18n, get_pixelle_video
+from web.state.session import init_session_state, init_i18n, get_trendlume
 from web.components.header import render_header
 from web.i18n import tr
 from web.utils.async_helpers import run_async
 
 # Page config
 st.set_page_config(
-    page_title="History - Pixelle-Video",
+    page_title="History - Trendlume",
     page_icon="📚",
     layout="wide",
 )
@@ -83,12 +83,12 @@ def truncate_text(text: str, max_length: int = 60) -> str:
     return text[:max_length] + "..."
 
 
-def render_sidebar_controls(pixelle_video):
+def render_sidebar_controls(trendlume):
     """Render sidebar with statistics and filters"""
     with st.sidebar:
         # Statistics
         st.markdown(f"**📊 {tr('history.total_tasks')}**")
-        stats = run_async(pixelle_video.history.get_statistics())
+        stats = run_async(trendlume.history.get_statistics())
         
         col1, col2 = st.columns(2)
         with col1:
@@ -161,7 +161,7 @@ def render_sidebar_controls(pixelle_video):
         return filter_status, sort_by, sort_order, page_size
 
 
-def render_grid_task_card(task: dict, pixelle_video):
+def render_grid_task_card(task: dict, trendlume):
     """Render a compact grid task card"""
     task_id = task["task_id"]
     title = task.get("title", "Untitled")
@@ -181,7 +181,7 @@ def render_grid_task_card(task: dict, pixelle_video):
     status_icon = status_map.get(status, "❓")
     
     # Get input text
-    detail = run_async(pixelle_video.history.get_task_detail(task_id))
+    detail = run_async(trendlume.history.get_task_detail(task_id))
     input_text = ""
     if detail and detail.get("metadata"):
         input_params = detail["metadata"].get("input", {})
@@ -244,7 +244,7 @@ def render_grid_task_card(task: dict, pixelle_video):
             with col1:
                 if st.button("✅", key=f"confirm_yes_{task_id}", use_container_width=True):
                     try:
-                        success = run_async(pixelle_video.history.delete_task(task_id))
+                        success = run_async(trendlume.history.delete_task(task_id))
                         if success:
                             st.success(tr("history.action.delete_success"))
                             st.session_state[f"confirm_delete_{task_id}"] = False
@@ -259,9 +259,9 @@ def render_grid_task_card(task: dict, pixelle_video):
                     st.rerun()
 
 
-def render_task_detail_modal(task_id: str, pixelle_video):
+def render_task_detail_modal(task_id: str, trendlume):
     """Render task detail in three-column layout"""
-    detail = run_async(pixelle_video.history.get_task_detail(task_id))
+    detail = run_async(trendlume.history.get_task_detail(task_id))
     
     if not detail:
         st.error("Task not found")
@@ -381,11 +381,11 @@ def main():
     # Render header
     render_header()
     
-    # Initialize Pixelle-Video
-    pixelle_video = get_pixelle_video()
+    # Initialize Trendlume
+    trendlume = get_trendlume()
     
     # Sidebar: Statistics + Filters
-    filter_status, sort_by, sort_order, page_size = render_sidebar_controls(pixelle_video)
+    filter_status, sort_by, sort_order, page_size = render_sidebar_controls(trendlume)
     
     # Initialize pagination in session state
     if "history_page" not in st.session_state:
@@ -400,12 +400,12 @@ def main():
     
     # If showing detail, render it
     if show_detail_for:
-        render_task_detail_modal(show_detail_for, pixelle_video)
+        render_task_detail_modal(show_detail_for, trendlume)
         return
     
     # Otherwise, show the grid list
     # Get task list
-    result = run_async(pixelle_video.history.get_task_list(
+    result = run_async(trendlume.history.get_task_list(
         page=st.session_state.history_page,
         page_size=page_size,
         status=filter_status,
@@ -436,7 +436,7 @@ def main():
                 task_idx = i + j
                 if task_idx < len(tasks):
                     with cols[j]:
-                        render_grid_task_card(tasks[task_idx], pixelle_video)
+                        render_grid_task_card(tasks[task_idx], trendlume)
     
     # Pagination
     if total_pages > 1:

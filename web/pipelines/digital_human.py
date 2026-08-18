@@ -1,3 +1,15 @@
+# Copyright (C) 2025 AIDC-AI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import time
 from pathlib import Path
@@ -20,8 +32,8 @@ from web.components.digital_tts_config import render_style_config
 from web.utils.async_helpers import run_async
 from web.utils.history_persistence import save_web_generation_history
 from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
-from pixelle_video.config import config_manager
-from pixelle_video.utils.os_util import create_task_output_dir
+from trendlume.config import config_manager
+from trendlume.utils.os_util import create_task_output_dir
 
 class DigitalHumanPipelineUI(PipelineUI):
     """
@@ -39,7 +51,7 @@ class DigitalHumanPipelineUI(PipelineUI):
     def description(self):
         return tr("pipeline.digital_human.description")
 
-    def render(self, pixelle_video: Any):
+    def render(self, trendlume: Any):
         # Three-column layout
         left_col, middle_col, right_col = st.columns([1, 1, 1])
         
@@ -48,7 +60,7 @@ class DigitalHumanPipelineUI(PipelineUI):
         # ====================================================================
         with left_col:
             asset_params = self.render_digital_human_input()
-            style_params = render_style_config(pixelle_video)
+            style_params = render_style_config(trendlume)
             # bgm_params = render_bgm_section(key_prefix="asset_")
             render_version_info()
         
@@ -57,7 +69,7 @@ class DigitalHumanPipelineUI(PipelineUI):
         # ====================================================================
         with middle_col:
             # Style configuration ()
-            workflow_path = self.workflow_path_config(pixelle_video)
+            workflow_path = self.workflow_path_config(trendlume)
             mode_params = self.render_digital_human_mode(asset_params["character_assets"])
         
         # ====================================================================
@@ -72,7 +84,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                 "workflow_path": workflow_path
             }
             
-            self._render_output_preview(pixelle_video, video_params)
+            self._render_output_preview(trendlume, video_params)
 
     def render_digital_human_input(self) -> dict:
         """Render digital human character image upload section"""
@@ -125,7 +137,7 @@ class DigitalHumanPipelineUI(PipelineUI):
 
             return {"character_assets": character_asset_paths}
 
-    def workflow_path_config(self, pixelle_video: Any) -> dict:
+    def workflow_path_config(self, trendlume: Any) -> dict:
         # Workflow source selection
         with st.container(border=True):
             st.markdown(f"**{tr('asset_based.section.source')}**")
@@ -179,7 +191,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                     }
                 ]
 
-            api_image_workflows = list_api_media_workflows(pixelle_video, "image")
+            api_image_workflows = list_api_media_workflows(trendlume, "image")
             image_source_options = []
             if digital_image_workflows("runninghub"):
                 image_source_options.append("runninghub")
@@ -239,7 +251,7 @@ class DigitalHumanPipelineUI(PipelineUI):
             workflow_config["api_video_workflow"] = None
             workflow_config["api_video_params"] = {}
             api_video_workflows = list_api_media_workflows(
-                pixelle_video,
+                trendlume,
                 "video",
                 required_adapter_abilities=["digital_human"],
                 verified_only=True,
@@ -421,7 +433,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                     "mode": mode
                     }
                     
-    def _render_output_preview(self, pixelle_video: Any, video_params: dict):
+    def _render_output_preview(self, trendlume: Any, video_params: dict):
         """Render output preview section"""
         with st.container(border=True):
             st.markdown(f"**{tr('section.video_generation')}**")
@@ -539,7 +551,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 if ref_audio:
                                     tts_kwargs["ref_audio"] = ref_audio
 
-                            await pixelle_video.tts(**tts_kwargs)
+                            await trendlume.tts(**tts_kwargs)
                             return audio_path
 
                         async def generate_api_digital_human(text: str) -> str:
@@ -580,7 +592,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                             }
                             progress_bar.progress(60)
                             status_text.text(tr("progress.generation"))
-                            media_result = await pixelle_video.media(**media_params)
+                            media_result = await trendlume.media(**media_params)
                             progress_bar.progress(100)
                             status_text.text(tr("status.success"))
                             return media_result.url
@@ -591,7 +603,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                             elif goods_text and goods_text.strip():
                                 generated_text = goods_text
                             else:
-                                generated_text = await pixelle_video.llm(
+                                generated_text = await trendlume.llm(
                                     prompt=(
                                         f"请为商品“{goods_title}”写一段适合数字人口播短视频的中文推广文案。"
                                         "要求自然、有吸引力，控制在80字以内，只输出文案正文。"
@@ -601,7 +613,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 )
                             return await generate_api_digital_human(generated_text)
 
-                        kit = await pixelle_video._get_or_create_comfykit()
+                        kit = await trendlume._get_or_create_comfykit()
 
                         if mode == "customize":
                             status_text.text(tr("progress.step_audio"))
@@ -631,7 +643,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 if ref_audio:
                                     tts_kwargs["ref_audio"] = ref_audio
 
-                            await pixelle_video.tts(**tts_kwargs)
+                            await trendlume.tts(**tts_kwargs)
                             progress_bar.progress(65)
                             status_text.text(tr("progress.concatenating"))
 
@@ -699,7 +711,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                         f"and make the scene suitable for a short spoken ad. Script: {goods_text}"
                                     )
                                     generated_image_path = os.path.join(task_dir, "generated_digital_image.png")
-                                    media_result = await pixelle_video.media(
+                                    media_result = await trendlume.media(
                                         prompt=image_prompt,
                                         workflow=api_image_workflow,
                                         media_type="image",
@@ -712,7 +724,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 else:
                                     workflow_path = third_workflow_path
                                     workflow_params = {"firstimage": character_assets[0], "secondimage": goods_assets[0]}
-                                    kit = await pixelle_video._get_or_create_comfykit()
+                                    kit = await trendlume._get_or_create_comfykit()
                                     workflow_config = json.load(open(workflow_path, 'r', encoding='utf8'))
                                     if workflow_config.get("source") == "runninghub" and "workflow_id" in workflow_config:
                                         workflow_input = workflow_config["workflow_id"]
@@ -744,7 +756,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                     if ref_audio:
                                         tts_kwargs["ref_audio"] = ref_audio
 
-                                await pixelle_video.tts(**tts_kwargs)
+                                await trendlume.tts(**tts_kwargs)
                                 progress_bar.progress(65)
                                 status_text.text(tr("progress.concatenating"))
 
@@ -795,7 +807,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                         f"Make it vertical, clean, commercial, and suitable for a spoken short video."
                                     )
                                     generated_image_path = os.path.join(task_dir, "generated_digital_image.png")
-                                    media_result = await pixelle_video.media(
+                                    media_result = await trendlume.media(
                                         prompt=image_prompt,
                                         workflow=api_image_workflow,
                                         media_type="image",
@@ -805,7 +817,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                         height=1920,
                                     )
                                     generated_image_url = media_result.url
-                                    generated_text = await pixelle_video.llm(
+                                    generated_text = await trendlume.llm(
                                         prompt=(
                                             f"请为商品“{goods_title}”写一段适合数字人口播短视频的中文推广文案。"
                                             "要求自然、有吸引力，控制在80字以内，只输出文案正文。"
@@ -816,7 +828,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 else:
                                     workflow_path = first_workflow_path
                                     workflow_params = {"firstimage": character_assets[0], "secondimage": goods_assets[0], "goodstype": goods_title}
-                                    kit = await pixelle_video._get_or_create_comfykit()
+                                    kit = await trendlume._get_or_create_comfykit()
                                     workflow_config = json.load(open(workflow_path, 'r', encoding='utf8'))
                                     if workflow_config.get("source") == "runninghub" and "workflow_id" in workflow_config:
                                         workflow_input = workflow_config["workflow_id"]
@@ -850,7 +862,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                     if ref_audio:
                                         tts_kwargs["ref_audio"] = ref_audio
 
-                                await pixelle_video.tts(**tts_kwargs)
+                                await trendlume.tts(**tts_kwargs)
                                 progress_bar.progress(65)
                                 status_text.text(tr("progress.concatenating"))
 
@@ -895,7 +907,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                     # Execute async generation
                     final_video_path = run_async(generate_digital_human_video())
                     run_async(save_web_generation_history(
-                        pixelle_video,
+                        trendlume,
                         task_id=Path(final_video_path).parent.name,
                         video_path=final_video_path,
                         pipeline="digital_human",

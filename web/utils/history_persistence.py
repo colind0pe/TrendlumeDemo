@@ -1,3 +1,15 @@
+# Copyright (C) 2025 AIDC-AI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Persistence helpers for Web-only generation workflows."""
 
 from __future__ import annotations
@@ -30,7 +42,7 @@ def _probe_video_duration(video_path: str) -> float:
 
 
 async def save_web_generation_history(
-    pixelle_video: Any,
+    trendlume: Any,
     *,
     task_id: str,
     video_path: str,
@@ -40,8 +52,8 @@ async def save_web_generation_history(
     n_frames: int = 1,
 ) -> None:
     """Save a minimal history record for workflows implemented directly in Web UI."""
-    if not getattr(pixelle_video, "persistence", None):
-        logger.warning("Pixelle persistence service is not initialized; skipping history save")
+    if not getattr(trendlume, "persistence", None):
+        logger.warning("Trendlume persistence service is not initialized; skipping history save")
         return
 
     path = Path(video_path)
@@ -74,11 +86,11 @@ async def save_web_generation_history(
             "n_frames": n_frames,
         },
         "config": {
-            "llm_model": pixelle_video.config.get("llm", {}).get("model", "unknown"),
-            "llm_base_url": pixelle_video.config.get("llm", {}).get("base_url", "unknown"),
+            "llm_model": trendlume.config.get("llm", {}).get("model", "unknown"),
+            "llm_base_url": trendlume.config.get("llm", {}).get("base_url", "unknown"),
             "source": "web",
         },
     }
 
-    await pixelle_video.persistence.save_task_metadata(task_id, metadata)
+    await trendlume.persistence.save_task_metadata(task_id, metadata)
     logger.info(f"Saved web workflow history: {task_id}")

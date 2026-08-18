@@ -1,4 +1,4 @@
-# 🙋‍♀️ Pixelle-Video FAQ
+# 🙋‍♀️ Trendlume FAQ
 
 ### How to integrate custom local workflows?
 
@@ -52,11 +52,3 @@ If you want to test workflows locally that were originally intended for RunningH
 
 All generated videos are automatically saved in the `output/` folder within the project directory. Upon completion, the interface will display the video duration, file size, number of shots, and a download link.
 
-### Community Resources
-
--   **GitHub Repository**: https://github.com/AIDC-AI/Pixelle-Video
--   **Issue Reporting**: Submit bugs or feature requests via GitHub Issues.
--   **Community Support**: Join discussion groups for help and experience sharing.
--   **Contribution**: The project is under the MIT license and welcomes contributions.
-
-💡 **Tip**: If you cannot find the answer you need in this FAQ, please submit an issue on GitHub or join the community discussion. We will continue to update this FAQ based on user feedback!

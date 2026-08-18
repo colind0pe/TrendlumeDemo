@@ -36,8 +36,8 @@ from web.pipelines.api_workflows import (
 from web.components.content_input import render_bgm_section, render_version_info
 from web.utils.async_helpers import run_async
 from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
-from pixelle_video.config import config_manager
-from pixelle_video.models.progress import ProgressEvent
+from trendlume.config import config_manager
+from trendlume.models.progress import ProgressEvent
 
 
 class AssetBasedPipelineUI(PipelineUI):
@@ -56,7 +56,7 @@ class AssetBasedPipelineUI(PipelineUI):
     def description(self):
         return tr("pipeline.custom_media.description")
     
-    def render(self, pixelle_video: Any):
+    def render(self, trendlume: Any):
         # Three-column layout
         left_col, middle_col, right_col = st.columns([1, 1, 1])
         
@@ -72,7 +72,7 @@ class AssetBasedPipelineUI(PipelineUI):
         # Middle Column: Video Configuration
         # ====================================================================
         with middle_col:
-            config_params = self._render_video_config(pixelle_video, asset_params)
+            config_params = self._render_video_config(trendlume, asset_params)
         
         # ====================================================================
         # Right Column: Output Preview
@@ -86,7 +86,7 @@ class AssetBasedPipelineUI(PipelineUI):
                 **config_params
             }
             
-            self._render_output_preview(pixelle_video, video_params)
+            self._render_output_preview(trendlume, video_params)
     
     def _render_asset_input(self) -> dict:
         """Render asset upload section"""
@@ -165,7 +165,7 @@ class AssetBasedPipelineUI(PipelineUI):
             "intent": intent if intent else None
         }
     
-    def _render_video_config(self, pixelle_video: Any, asset_params: dict | None = None) -> dict:
+    def _render_video_config(self, trendlume: Any, asset_params: dict | None = None) -> dict:
         """Render video configuration section"""
         # Duration configuration
         with st.container(border=True):
@@ -201,7 +201,7 @@ class AssetBasedPipelineUI(PipelineUI):
             
             # Check if RunningHub API key is configured
             comfyui_config = config_manager.get_comfyui_config()
-            api_asset_analysis = getattr(pixelle_video, "api_asset_analysis", None)
+            api_asset_analysis = getattr(trendlume, "api_asset_analysis", None)
             api_vlm_models = (
                 api_asset_analysis.list_models(configured_only=True)
                 if api_asset_analysis is not None
@@ -356,7 +356,7 @@ class AssetBasedPipelineUI(PipelineUI):
             api_video_workflow = None
             api_video_params = {}
             api_video_workflows = list_api_media_workflows(
-                pixelle_video,
+                trendlume,
                 "video",
                 required_adapter_abilities=["first_frame_i2v"],
                 verified_only=True,
@@ -412,7 +412,7 @@ class AssetBasedPipelineUI(PipelineUI):
             st.markdown(f"**{tr('section.tts')}**")
             
             # Import voice configuration
-            from pixelle_video.tts_voices import EDGE_TTS_VOICES, get_voice_display_name
+            from trendlume.tts_voices import EDGE_TTS_VOICES, get_voice_display_name
             
             # Get saved voice from config
             comfyui_config = config_manager.get_comfyui_config()
@@ -472,7 +472,7 @@ class AssetBasedPipelineUI(PipelineUI):
             "tts_speed": tts_speed
         }
     
-    def _render_output_preview(self, pixelle_video: Any, video_params: dict):
+    def _render_output_preview(self, trendlume: Any, video_params: dict):
         """Render output preview section"""
         with st.container(border=True):
             st.markdown(f"**{tr('section.video_generation')}**")
@@ -512,10 +512,10 @@ class AssetBasedPipelineUI(PipelineUI):
                 
                 try:
                     # Import pipeline
-                    from pixelle_video.pipelines.asset_based import AssetBasedPipeline
+                    from trendlume.pipelines.asset_based import AssetBasedPipeline
                     
                     # Create pipeline
-                    pipeline = AssetBasedPipeline(pixelle_video)
+                    pipeline = AssetBasedPipeline(trendlume)
                     
                     # Progress callback
                     def update_progress(event: ProgressEvent):
