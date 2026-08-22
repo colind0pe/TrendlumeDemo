@@ -59,7 +59,7 @@ async def generate_title(
     
     # Pass max_length to prompt so LLM knows the character limit
     prompt = build_title_generation_prompt(content, max_length=max_length)
-    response = await llm_service(prompt, temperature=0.7, max_tokens=2000)
+    response = await llm_service(prompt, temperature=0.7, max_tokens=8192)
     
     # Clean up response
     title = response.strip()
@@ -126,7 +126,7 @@ async def generate_narrations_from_topic(
     response = await llm_service(
         prompt=prompt,
         temperature=0.8,
-        max_tokens=2000
+        max_tokens=8192
     )
     
     logger.debug(f"LLM response: {response[:200]}...")
@@ -184,8 +184,9 @@ async def generate_narrations_from_content(
     response = await llm_service(
         prompt=prompt,
         temperature=0.8,
-        max_tokens=2000
+        max_tokens=8192
     )
+
     
     # Parse JSON
     result = _parse_json(response)

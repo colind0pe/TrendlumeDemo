@@ -115,6 +115,47 @@ class LLMService:
         
         return AsyncOpenAI(**client_kwargs)
     
+    def _prepare_request_kwargs(
+        self,
+        client: AsyncOpenAI,
+        **kwargs
+    ) -> dict:
+        """
+        Prepare request kwargs including extra_body to unconditionally disable thinking and reasoning modes
+        across OpenAI, Anthropic, and Responses API formats.
+        
+        Args:
+            client: AsyncOpenAI client instance
+            **kwargs: Additional parameters
+        
+        Returns:
+            Prepared kwargs dict for client.chat.completions.create
+        """
+        request_kwargs = dict(kwargs)
+        
+        extra_body = request_kwargs.pop("extra_body", None)
+        extra_body_dict = dict(extra_body) if extra_body else {}
+        
+        base_url_str = str(client.base_url) if client.base_url else ""
+        is_official_openai = "api.openai.com" in base_url_str
+        
+        # Completely and unconditionally disable thinking/reasoning for OpenAI-compatible providers
+        if not is_official_openai:
+            # 1. OpenAI format
+            if "thinking" not in extra_body_dict:
+                extra_body_dict["thinking"] = {"type": "disabled"}
+            # 2. Responses API format (none indicates turning off thinking mode)
+            if "reasoning" not in extra_body_dict:
+                extra_body_dict["reasoning"] = {"effort": "none"}
+            # 3. DashScope / Qwen compatible format
+            if "enable_thinking" not in extra_body_dict:
+                extra_body_dict["enable_thinking"] = False
+        
+        if extra_body_dict:
+            request_kwargs["extra_body"] = extra_body_dict
+            
+        return request_kwargs
+
     async def __call__(
         self,
         prompt: str,
@@ -122,7 +163,7 @@ class LLMService:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 2000,
+        max_tokens: int = 8192,
         response_type: Optional[Type[T]] = None,
         **kwargs
     ) -> Union[str, T]:
@@ -135,7 +176,7 @@ class LLMService:
             base_url: Base URL (optional, uses config if not provided)
             model: Model name (optional, uses config if not provided)
             temperature: Sampling temperature (0.0-2.0). Lower is more deterministic.
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (default: 8192)
             response_type: Optional Pydantic model class for structured output.
                           If provided, returns parsed model instance instead of string.
             **kwargs: Additional provider-specific parameters
@@ -185,12 +226,16 @@ class LLMService:
                 )
             else:
                 # Standard text output mode
+                request_kwargs = self._prepare_request_kwargs(
+                    client=client,
+                    **kwargs
+                )
                 response = await client.chat.completions.create(
                     model=final_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    **kwargs
+                    **request_kwargs
                 )
                 
                 raw_content = response.choices[0].message.content
@@ -214,7 +259,7 @@ class LLMService:
         prompt: str,
         response_type: Type[T],
         temperature: float,
-        max_tokens: int,
+        max_tokens: int = 8192,
         **kwargs
     ) -> T:
         """
@@ -239,13 +284,18 @@ class LLMService:
         json_schema_instruction = self._get_json_schema_instruction(response_type)
         enhanced_prompt = f"{prompt}\n\n{json_schema_instruction}"
         
+        request_kwargs = self._prepare_request_kwargs(
+            client=client,
+            **kwargs
+        )
+        
         # Call LLM with enhanced prompt
         response = await client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": enhanced_prompt}],
             temperature=temperature,
             max_tokens=max_tokens,
-            **kwargs
+            **request_kwargs
         )
         raw_content = response.choices[0].message.content
         content = raw_content if isinstance(raw_content, str) else ""
