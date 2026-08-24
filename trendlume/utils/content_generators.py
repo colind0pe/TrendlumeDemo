@@ -19,9 +19,26 @@ These functions are reusable across different pipelines.
 
 import json
 import re
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Any, Callable
 
 from loguru import logger
+
+
+_CODE_FENCE_RE = re.compile(
+    r"^```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)\r?\n```\s*$"
+)
+
+
+def _strip_code_fence(text: str) -> str:
+    """
+    Strip surrounding markdown code fence from an LLM response.
+    Uses anchored regex to avoid matching nested code blocks.
+    """
+    t = (text or "").strip()
+    m = _CODE_FENCE_RE.match(t)
+    if m:
+        return m.group(1).strip()
+    return t
 
 
 async def generate_title(
@@ -97,10 +114,17 @@ async def generate_narrations_from_topic(
     topic: str,
     n_scenes: int = 5,
     min_words: int = 5,
-    max_words: int = 20
+    max_words: int = 20,
+    genre: str = "auto",
+    hook_type: Optional[str] = None,
+    custom_prompt: str = "",
+    custom_system_prompt: str = "",
+    research_service: Optional[Any] = None,
+    enable_research: Optional[bool] = None,
 ) -> List[str]:
     """
-    Generate narrations from topic using LLM
+    Generate narrations from topic using LLM with 3-second golden hook, multi-genre support,
+    and optional web research context.
     
     Args:
         llm_service: LLM service instance
@@ -108,19 +132,52 @@ async def generate_narrations_from_topic(
         n_scenes: Number of narrations to generate
         min_words: Minimum narration length
         max_words: Maximum narration length
+        genre: Track style ('general', 'science_tech', 'business_wealth', 'emotion_growth', 'culture_history', 'humor_meme', 'product_review')
+        hook_type: Golden hook strategy ('bold_claim', 'curiosity_gap', 'mistake_warning', 'story_twist', 'pain_point')
+        custom_prompt: Additional user guidance or specific requirements
+        custom_system_prompt: Custom system role override
+        research_service: Optional ResearchService instance (must be pre-created)
+        enable_research: Optional override to enable/disable research (defaults to config)
     
     Returns:
         List of narration texts
     """
     from trendlume.prompts import build_topic_narration_prompt
     
-    logger.info(f"Generating {n_scenes} narrations from topic: {topic}")
+    logger.info(f"Generating {n_scenes} narrations from topic: '{topic}' (genre={genre}, hook={hook_type})")
     
+    # 1. Execute Web Research if a research_service was provided and enabled
+    research_context_text = None
+    if research_service is not None:
+        try:
+            if research_service.is_enabled(override=enable_research):
+                logger.info(f"🔍 Performing web research for topic: '{topic}'")
+                context = await research_service.conduct_research(
+                    topic=topic,
+                    llm_service=llm_service,
+                    enable_override=enable_research,
+                )
+                if context and not context.is_empty:
+                    research_context_text = context.formatted_text
+                    logger.info(f"✅ Web research completed ({len(context.results)} sources found)")
+                else:
+                    logger.info("ℹ️ Web research completed with no additional context")
+        except Exception as e:
+            logger.warning(f"Research step failed, proceeding with standard generation: {e}")
+            research_context_text = None
+
+
+    # 2. Build prompt
     prompt = build_topic_narration_prompt(
         topic=topic,
         n_storyboard=n_scenes,
         min_words=min_words,
-        max_words=max_words
+        max_words=max_words,
+        genre=genre,
+        hook_type=hook_type,
+        custom_prompt=custom_prompt,
+        custom_system_prompt=custom_system_prompt,
+        research_context=research_context_text,
     )
     
     response = await llm_service(
@@ -150,15 +207,18 @@ async def generate_narrations_from_topic(
     return narrations
 
 
+
 async def generate_narrations_from_content(
     llm_service,
     content: str,
     n_scenes: int = 5,
     min_words: int = 5,
-    max_words: int = 20
+    max_words: int = 20,
+    genre: str = "general",
+    custom_prompt: str = "",
 ) -> List[str]:
     """
-    Generate narrations from user-provided content using LLM
+    Generate narrations from user-provided content using LLM with retention-optimized structuring.
     
     Args:
         llm_service: LLM service instance
@@ -166,6 +226,8 @@ async def generate_narrations_from_content(
         n_scenes: Number of narrations to generate
         min_words: Minimum narration length
         max_words: Maximum narration length
+        genre: Genre style hint (default: 'general')
+        custom_prompt: Additional user guidance or specific requirements
     
     Returns:
         List of narration texts
@@ -178,7 +240,9 @@ async def generate_narrations_from_content(
         content=content,
         n_storyboard=n_scenes,
         min_words=min_words,
-        max_words=max_words
+        max_words=max_words,
+        genre=genre,
+        custom_prompt=custom_prompt,
     )
     
     response = await llm_service(
@@ -186,7 +250,6 @@ async def generate_narrations_from_content(
         temperature=0.8,
         max_tokens=8192
     )
-
     
     # Parse JSON
     result = _parse_json(response)
@@ -267,52 +330,50 @@ async def split_narration_script(
     return narrations
 
 
-async def generate_image_prompts(
+async def _batch_generate_prompts(
     llm_service,
     narrations: List[str],
-    min_words: int = 30,
-    max_words: int = 60,
+    prompt_builder: Callable,
+    response_key: str,
+    *,
+    label: str = "prompts",
     batch_size: int = 10,
     max_retries: int = 3,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    **builder_kwargs,
 ) -> List[str]:
     """
-    Generate image prompts from narrations (with batching and retry)
+    Generic batched LLM prompt generation with retry.
     
     Args:
         llm_service: LLM service instance
-        narrations: List of narrations
-        min_words: Min image prompt length
-        max_words: Max image prompt length
+        narrations: List of narrations to generate prompts for
+        prompt_builder: Callable that builds the LLM prompt (must accept `narrations` kwarg)
+        response_key: JSON key to extract results from LLM response (e.g. 'image_prompts')
+        label: Human-readable label for logging (default: 'prompts')
         batch_size: Max narrations per batch (default: 10)
         max_retries: Max retry attempts per batch (default: 3)
         progress_callback: Optional callback(completed, total, message) for progress updates
+        **builder_kwargs: Additional keyword arguments passed to prompt_builder
     
     Returns:
-        List of image prompts (base prompts, without prefix applied)
+        List of generated prompts
     """
-    from trendlume.prompts import build_image_prompt_prompt
+    logger.info(f"Generating {label} for {len(narrations)} narrations (batch_size={batch_size})")
     
-    logger.info(f"Generating image prompts for {len(narrations)} narrations (batch_size={batch_size})")
-    
-    # Split narrations into batches
     batches = [narrations[i:i + batch_size] for i in range(0, len(narrations), batch_size)]
     logger.info(f"Split into {len(batches)} batches")
     
     all_prompts = []
     
-    # Process each batch
     for batch_idx, batch_narrations in enumerate(batches, 1):
         logger.info(f"Processing batch {batch_idx}/{len(batches)} ({len(batch_narrations)} narrations)")
         
-        # Retry logic for this batch
         for attempt in range(1, max_retries + 1):
             try:
-                # Generate prompts for this batch
-                prompt = build_image_prompt_prompt(
+                prompt = prompt_builder(
                     narrations=batch_narrations,
-                    min_words=min_words,
-                    max_words=max_words
+                    **builder_kwargs,
                 )
                 
                 response = await llm_service(
@@ -323,51 +384,79 @@ async def generate_image_prompts(
                 
                 logger.debug(f"Batch {batch_idx} attempt {attempt}: LLM response length: {len(response)} chars")
                 
-                # Parse JSON
                 result = _parse_json(response)
                 
-                if "image_prompts" not in result:
-                    raise KeyError("Invalid response format: missing 'image_prompts'")
+                if response_key not in result:
+                    raise KeyError(f"Invalid response format: missing '{response_key}'")
                 
-                batch_prompts = result["image_prompts"]
+                batch_prompts = result[response_key]
                 
-                # Validate count
                 if len(batch_prompts) != len(batch_narrations):
                     error_msg = (
-                        f"Batch {batch_idx} prompt count mismatch (attempt {attempt}/{max_retries}):\n"
-                        f"  Expected: {len(batch_narrations)} prompts\n"
-                        f"  Got: {len(batch_prompts)} prompts"
+                        f"Batch {batch_idx} {label} count mismatch (attempt {attempt}/{max_retries}): "
+                        f"expected {len(batch_narrations)}, got {len(batch_prompts)}"
                     )
-                    logger.warning(error_msg)
-                    
                     if attempt < max_retries:
-                        logger.info(f"Retrying batch {batch_idx}...")
+                        logger.warning(error_msg)
                         continue
-                    else:
-                        raise ValueError(error_msg)
+                    raise ValueError(error_msg)
                 
-                # Success!
-                logger.info(f"✅ Batch {batch_idx} completed successfully ({len(batch_prompts)} prompts)")
                 all_prompts.extend(batch_prompts)
+                logger.info(f"✅ Batch {batch_idx} completed ({len(batch_prompts)} {label})")
                 
-                # Report progress
                 if progress_callback:
                     progress_callback(
                         len(all_prompts),
                         len(narrations),
                         f"Batch {batch_idx}/{len(batches)} completed"
                     )
-                
                 break
                 
             except json.JSONDecodeError as e:
                 logger.error(f"Batch {batch_idx} JSON parse error (attempt {attempt}/{max_retries}): {e}")
                 if attempt >= max_retries:
                     raise
-                logger.info(f"Retrying batch {batch_idx}...")
+            except (KeyError, ValueError):
+                if attempt >= max_retries:
+                    raise
+            
+            logger.info(f"Retrying batch {batch_idx}...")
     
-    logger.info(f"✅ Generated {len(all_prompts)} image prompts")
+    logger.info(f"✅ Generated {len(all_prompts)} {label}")
     return all_prompts
+
+
+async def generate_image_prompts(
+    llm_service,
+    narrations: List[str],
+    min_words: int = 30,
+    max_words: int = 60,
+    batch_size: int = 10,
+    max_retries: int = 3,
+    progress_callback: Optional[callable] = None,
+    style_preset: Optional[str] = None,
+    custom_style_prefix: str = "",
+) -> List[str]:
+    """
+    Generate image prompts from narrations (with batching, retry, shot framing and style presets)
+    """
+    from trendlume.prompts import build_image_prompt_prompt
+    
+    logger.info(f"Image prompt generation: style_preset={style_preset}")
+    return await _batch_generate_prompts(
+        llm_service=llm_service,
+        narrations=narrations,
+        prompt_builder=build_image_prompt_prompt,
+        response_key="image_prompts",
+        label="image prompts",
+        batch_size=batch_size,
+        max_retries=max_retries,
+        progress_callback=progress_callback,
+        min_words=min_words,
+        max_words=max_words,
+        style_preset=style_preset,
+        custom_style_prefix=custom_style_prefix,
+    )
 
 
 async def generate_video_prompts(
@@ -377,94 +466,46 @@ async def generate_video_prompts(
     max_words: int = 60,
     batch_size: int = 10,
     max_retries: int = 3,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    custom_style_prefix: str = "",
 ) -> List[str]:
     """
-    Generate video prompts from narrations (with batching and retry)
-    
-    Args:
-        llm_service: LLM service instance
-        narrations: List of narrations
-        min_words: Min video prompt length
-        max_words: Max video prompt length
-        batch_size: Max narrations per batch (default: 10)
-        max_retries: Max retry attempts per batch (default: 3)
-        progress_callback: Optional callback(completed, total, message) for progress updates
-    
-    Returns:
-        List of video prompts (base prompts, without prefix applied)
+    Generate video prompts from narrations (with batching, retry, and camera motion guidelines)
     """
     from trendlume.prompts.video_generation import build_video_prompt_prompt
     
-    logger.info(f"Generating video prompts for {len(narrations)} narrations (batch_size={batch_size})")
-    
-    # Split narrations into batches
-    batches = [narrations[i:i + batch_size] for i in range(0, len(narrations), batch_size)]
-    logger.info(f"Split into {len(batches)} batches")
-    
-    all_prompts = []
-    
-    # Process each batch
-    for batch_idx, batch_narrations in enumerate(batches, 1):
-        logger.info(f"Processing batch {batch_idx}/{len(batches)} ({len(batch_narrations)} narrations)")
-        
-        # Retry logic for this batch
-        for attempt in range(1, max_retries + 1):
-            try:
-                # Generate prompts for this batch
-                prompt = build_video_prompt_prompt(
-                    narrations=batch_narrations,
-                    min_words=min_words,
-                    max_words=max_words
-                )
-                
-                response = await llm_service(
-                    prompt=prompt,
-                    temperature=0.7,
-                    max_tokens=8192
-                )
-                
-                logger.debug(f"Batch {batch_idx} attempt {attempt}: LLM response length: {len(response)} chars")
-                
-                # Parse JSON
-                result = _parse_json(response)
-                
-                if "video_prompts" not in result:
-                    raise KeyError("Invalid response format: missing 'video_prompts'")
-                
-                batch_prompts = result["video_prompts"]
-                
-                # Validate batch result
-                if len(batch_prompts) != len(batch_narrations):
-                    raise ValueError(
-                        f"Prompt count mismatch: expected {len(batch_narrations)}, got {len(batch_prompts)}"
-                    )
-                
-                # Success - add to all_prompts
-                all_prompts.extend(batch_prompts)
-                logger.info(f"✓ Batch {batch_idx} completed: {len(batch_prompts)} video prompts")
-                
-                # Report progress
-                if progress_callback:
-                    completed = len(all_prompts)
-                    total = len(narrations)
-                    progress_callback(completed, total, f"Batch {batch_idx}/{len(batches)} completed")
-                
-                break  # Success, move to next batch
-            
-            except Exception as e:
-                logger.warning(f"✗ Batch {batch_idx} attempt {attempt} failed: {e}")
-                if attempt >= max_retries:
-                    raise
-                logger.info(f"Retrying batch {batch_idx}...")
-    
-    logger.info(f"✅ Generated {len(all_prompts)} video prompts")
-    return all_prompts
+    return await _batch_generate_prompts(
+        llm_service=llm_service,
+        narrations=narrations,
+        prompt_builder=build_video_prompt_prompt,
+        response_key="video_prompts",
+        label="video prompts",
+        batch_size=batch_size,
+        max_retries=max_retries,
+        progress_callback=progress_callback,
+        min_words=min_words,
+        max_words=max_words,
+        custom_style_prefix=custom_style_prefix,
+    )
+
+
+def _normalize_parsed_json(data) -> dict:
+    """
+    Ensure parsed JSON is always a dict.
+    If the LLM returned a raw array, wrap it under a 'data' key.
+    Callers should check for their specific expected key.
+    """
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list):
+        return {"data": data}
+    raise ValueError(f"Unexpected JSON type: {type(data).__name__}")
 
 
 def _parse_json(text: str) -> dict:
     """
     Parse JSON from text, with fallback to extract JSON from markdown code blocks
+    and raw JSON objects/arrays.
     
     Args:
         text: Text containing JSON
@@ -473,31 +514,56 @@ def _parse_json(text: str) -> dict:
         Parsed JSON dict
         
     Raises:
+        ValueError: If text is empty or missing
         json.JSONDecodeError: If no valid JSON found
     """
-    # Try direct parsing first
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
+    if not text or not text.strip():
+        raise ValueError("LLM returned empty content.")
     
-    # Try to extract JSON from markdown code block
-    json_pattern = r'```(?:json)?\s*([\s\S]+?)\s*```'
-    match = re.search(json_pattern, text, re.DOTALL)
-    if match:
+    target_text = text.strip()
+    
+    # 1. Strip surrounding markdown code fence and try direct parsing
+    stripped_fence_text = _strip_code_fence(target_text)
+    for candidate in (stripped_fence_text, target_text):
         try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
+            return _normalize_parsed_json(json.loads(candidate))
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
     
-    # Try to find any JSON object in the text
-    json_pattern = r'\{[^{}]*(?:"narrations"|"image_prompts")\s*:\s*\[[^\]]*\][^{}]*\}'
-    match = re.search(json_pattern, text, re.DOTALL)
-    if match:
+    # 2. Try extracting from markdown code block via regex
+    code_block_match = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', target_text, re.DOTALL)
+    if code_block_match:
         try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
+            return _normalize_parsed_json(json.loads(code_block_match.group(1).strip()))
+        except (json.JSONDecodeError, ValueError):
             pass
     
-    # If all fails, raise error
-    raise json.JSONDecodeError("No valid JSON found", text, 0)
+    # 3. Try finding JSON object with expected keys
+    key_pattern = r'\{[^{}]*(?:"narrations"|"image_prompts"|"video_prompts"|"queries")\s*:\s*\[[^\]]*\][^{}]*\}'
+    key_match = re.search(key_pattern, target_text, re.DOTALL)
+    if key_match:
+        try:
+            return _normalize_parsed_json(json.loads(key_match.group(0)))
+        except (json.JSONDecodeError, ValueError):
+            pass
+    
+    # 4. Broader search for any JSON object (outermost curly braces)
+    brace_start = target_text.find('{')
+    brace_end = target_text.rfind('}')
+    if brace_start != -1 and brace_end > brace_start:
+        try:
+            return _normalize_parsed_json(json.loads(target_text[brace_start:brace_end + 1]))
+        except (json.JSONDecodeError, ValueError):
+            pass
+    
+    # 5. Array fallback if the LLM returned a plain JSON array [ ... ]
+    bracket_start = target_text.find('[')
+    bracket_end = target_text.rfind(']')
+    if bracket_start != -1 and bracket_end > bracket_start:
+        try:
+            return _normalize_parsed_json(json.loads(target_text[bracket_start:bracket_end + 1]))
+        except (json.JSONDecodeError, ValueError):
+            pass
+    
+    raise json.JSONDecodeError("No valid JSON found in LLM response", text, 0)
+

@@ -112,6 +112,15 @@ class ComfyUIConfig(BaseModel):
     video: VideoSubConfig = Field(default_factory=VideoSubConfig, description="Video-specific configuration")
 
 
+class ResearchConfig(BaseModel):
+    """Web Research configuration"""
+    enabled: bool = Field(default=False, description="Enable web research enhancement")
+    tavily_api_key: str = Field(default="", description="Tavily Search API Key")
+    max_queries: int = Field(default=3, ge=1, le=10, description="Max search queries to generate per topic")
+    max_results: int = Field(default=5, ge=1, le=20, description="Max search results per query")
+    max_context: int = Field(default=3000, ge=500, le=20000, description="Max characters in research context")
+
+
 class TemplateConfig(BaseModel):
     """Template configuration"""
     default_template: str = Field(
@@ -124,6 +133,7 @@ class TrendlumeVideoConfig(BaseModel):
     """Trendlume main configuration"""
     project_name: str = Field(default="Trendlume", description="Project name")
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    research: ResearchConfig = Field(default_factory=ResearchConfig)
     api_providers: APIProvidersConfig = Field(default_factory=APIProvidersConfig)
     comfyui: ComfyUIConfig = Field(default_factory=ComfyUIConfig)
     template: TemplateConfig = Field(default_factory=TemplateConfig)

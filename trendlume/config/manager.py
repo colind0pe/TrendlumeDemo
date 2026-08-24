@@ -179,3 +179,19 @@ class ConfigManager:
         
         if updates:
             self.update({"comfyui": updates})
+
+    def get_research_config(self) -> dict:
+        """Get Web Research configuration as dict"""
+        return {
+            "enabled": self.config.research.enabled,
+            "tavily_api_key": self.config.research.tavily_api_key,
+            "max_queries": self.config.research.max_queries,
+            "max_results": self.config.research.max_results,
+            "max_context": self.config.research.max_context,
+        }
+
+    def set_research_config(self, **kwargs):
+        """Set Web Research configuration. Only non-None values are updated."""
+        updates = {k: v for k, v in kwargs.items() if v is not None}
+        if updates:
+            self.update({"research": updates})

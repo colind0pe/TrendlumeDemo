@@ -426,6 +426,64 @@ def render_advanced_settings():
                     type="password",
                     key="api_media_kling_secret_key",
                 )
+
+        # ====================================================================
+        # Web Research Configuration
+        # ====================================================================
+        research_cfg = config_manager.get_research_config()
+        with st.container(border=True):
+            st.markdown(f"**{'联网搜索增强' if zh else 'Web Research Enhancement'}**")
+            
+            research_enabled = st.checkbox(
+                "启用联网搜索"
+                if zh
+                else "Enable Web Research",
+                value=bool(research_cfg.get("enabled", False)),
+                key="research_enabled",
+            )
+            
+            tavily_key_col, link_col = st.columns([3, 1])
+            with tavily_key_col:
+                research_tavily_key = st.text_input(
+                    "Tavily API Key",
+                    value=research_cfg.get("tavily_api_key", ""),
+                    type="password",
+                    help="Get your free API key at https://tavily.com",
+                    key="research_tavily_key",
+                )
+            with link_col:
+                st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                st.markdown("[Tavily Dashboard](https://tavily.com)")
+
+            q_col, r_col, c_col = st.columns(3)
+            with q_col:
+                research_max_queries = st.number_input(
+                    "最大 Query 数" if zh else "Max Queries",
+                    min_value=1,
+                    max_value=10,
+                    value=int(research_cfg.get("max_queries", 3)),
+                    help="RESEARCH_MAX_QUERIES",
+                    key="research_max_queries",
+                )
+            with r_col:
+                research_max_results = st.number_input(
+                    "单 Query 结果数" if zh else "Max Results",
+                    min_value=1,
+                    max_value=20,
+                    value=int(research_cfg.get("max_results", 5)),
+                    help="RESEARCH_MAX_RESULTS",
+                    key="research_max_results",
+                )
+            with c_col:
+                research_max_context = st.number_input(
+                    "Context 上限字符" if zh else "Max Context Length",
+                    min_value=500,
+                    max_value=20000,
+                    value=int(research_cfg.get("max_context", 3000)),
+                    step=500,
+                    help="RESEARCH_MAX_CONTEXT",
+                    key="research_max_context",
+                )
         
         # ====================================================================
         # Action Buttons (full width at bottom)
@@ -442,6 +500,15 @@ def render_advanced_settings():
                     else:
                         config_manager.set_llm_config(llm_api_key, llm_base_url, llm_model)
                     
+                    # Save Web Research configuration
+                    config_manager.set_research_config(
+                        enabled=bool(research_enabled),
+                        tavily_api_key=research_tavily_key or "",
+                        max_queries=int(research_max_queries),
+                        max_results=int(research_max_results),
+                        max_context=int(research_max_context),
+                    )
+
                     # Save ComfyUI configuration (optional fields, always save what's provided)
                     # Convert checkbox to instance type: True -> "plus", False -> ""
                     instance_type = "plus" if runninghub_48g_enabled else ""
@@ -479,6 +546,7 @@ def render_advanced_settings():
                         "secret_key": api_kling_secret_key or "",
                         "use_proxy": bool(api_kling_use_proxy),
                     })
+
                     
                     # Only save to file if LLM config is valid
                     if llm_api_key and llm_base_url and llm_model:

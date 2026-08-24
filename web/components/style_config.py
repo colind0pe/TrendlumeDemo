@@ -83,7 +83,7 @@ def render_style_config(trendlume):
             # Get saved voice from config
             local_config = tts_config.get("local", {})
             saved_voice = local_config.get("voice", "zh-CN-YunjianNeural")
-            saved_speed = local_config.get("speed", 1.2)
+            saved_speed = local_config.get("speed", 1.0)
             
             # Build voice options with i18n
             voice_options = []
@@ -422,7 +422,7 @@ def render_style_config(trendlume):
             size_groups.append(all_templates)
         
         # Create tabs for each size group (wrapped in expander)
-        with st.expander(tr("template.gallery_view"), expanded=True):
+        with st.expander(tr("template.gallery_view"), expanded=False):
             if size_groups:
                 tabs = st.tabs(size_labels)
                 
@@ -829,11 +829,37 @@ def render_style_config(trendlume):
             # Prompt prefix input
             # Get current prompt_prefix from config (based on media type)
             current_prefix = comfyui_config.get(media_config_key, {}).get("prompt_prefix", "")
+            
+            # Visual style preset selector
+            from trendlume.prompts import IMAGE_STYLE_PRESETS
+            _STYLE_EMOJI = {
+                "stick_figure": "✏️", "minimalist_line_art": "🎨",
+                "chinese_ink": "🖌️", "cinematic_real": "🎬", "animation": "🧸",
+            }
+            style_options = ["custom"] + list(IMAGE_STYLE_PRESETS.keys())
+            style_labels = {"custom": "🛠️ 自定义风格 (手动编辑下方前缀)"}
+            style_labels.update({
+                k: f"{_STYLE_EMOJI.get(k, '🎨')} {v['name']}"
+                for k, v in IMAGE_STYLE_PRESETS.items()
+            })
+            selected_style_preset = st.selectbox(
+                "视觉美学风格预设 (可选)",
+                options=style_options,
+                format_func=lambda x: style_labels.get(x, x),
+                index=0,
+                key="style_preset_selector",
+                help="快速选用经过精心调优的专业视觉美学提示词模板"
+            )
+            
+            if selected_style_preset != "custom" and selected_style_preset in IMAGE_STYLE_PRESETS:
+                prefix_default_val = IMAGE_STYLE_PRESETS[selected_style_preset]["description"]
+            else:
+                prefix_default_val = current_prefix
         
             # Prompt prefix input (temporary, not saved to config)
             prompt_prefix = st.text_area(
                 tr('style.prompt_prefix'),
-                value=current_prefix,
+                value=prefix_default_val,
                 placeholder=tr("style.prompt_prefix_placeholder"),
                 height=80,
                 label_visibility="visible",
@@ -931,6 +957,7 @@ def render_style_config(trendlume):
             # Set default values for later use
             workflow_key = None
             prompt_prefix = ""
+            selected_style_preset = None
     
     # Return all style configuration parameters
     final_media_workflow = workflow_key
@@ -946,6 +973,7 @@ def render_style_config(trendlume):
         "media_workflow": final_media_workflow,
         "api_video_params": api_video_params if template_media_type == "video" else None,
         "prompt_prefix": prompt_prefix if prompt_prefix else "",
+        "style_preset": selected_style_preset if selected_style_preset and selected_style_preset != "custom" else None,
         "media_width": media_width,
         "media_height": media_height
     }

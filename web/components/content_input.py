@@ -105,8 +105,13 @@ def render_content_input():
                 "text": text,
                 "title": title,
                 "n_scenes": n_scenes,
-                "split_mode": split_mode
+                "split_mode": split_mode,
+                "genre": "auto",
+                "hook_type": None,
+                "custom_prompt": "",
             }
+
+
         
         else:
             # ================================================================
@@ -122,26 +127,25 @@ def render_content_input():
 - ✅ {tr('batch.rule_3')}
             """)
             
-            # Batch topics input
-            text_input = st.text_area(
-                tr("batch.topics_label"),
-                height=300,
-                placeholder=tr("batch.topics_placeholder"),
-                help=tr("batch.topics_help")
+            # Batch input method
+            batch_input_method = st.radio(
+                "Batch Input Method",
+                ["text", "file"],
+                horizontal=True,
+                label_visibility="collapsed"
             )
             
-            # Split topics by newline
-            if text_input:
-                # Simple split by newline, filter empty lines
-                topics = [
-                    line.strip() 
-                    for line in text_input.strip().split('\n') 
-                    if line.strip()
-                ]
-                
-                if topics:
-                    # Check count limit
-                    if len(topics) > 100:
+            if batch_input_method == "text":
+                topics_text = st.text_area(
+                    tr("batch.topics_label"),
+                    placeholder=tr("batch.topics_placeholder"),
+                    height=180,
+                    help=tr("batch.topics_help")
+                )
+                if topics_text:
+                    from web.utils.batch_manager import parse_topics_from_text
+                    topics = parse_topics_from_text(topics_text)
+                    if len(topics) > 10:
                         st.error(tr("batch.count_error", count=len(topics)))
                         topics = []
                     else:
@@ -184,6 +188,9 @@ def render_content_input():
                 "mode": "generate",  # Fixed to AI generate content
                 "title_prefix": title_prefix,
                 "n_scenes": n_scenes,
+                "genre": "auto",
+                "hook_type": None,
+                "custom_prompt": "",
             }
 
 

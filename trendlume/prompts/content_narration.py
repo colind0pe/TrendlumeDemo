@@ -13,92 +13,107 @@
 """
 Content narration generation prompt
 
-For extracting/refining narrations from user-provided content.
+For extracting, refining, and restructuring user-provided content into
+high-retention, spoken-style short video narration scripts.
 """
 
+from typing import Optional
 
-CONTENT_NARRATION_PROMPT = """# Role Definition
-Globally, you must strictly output copy in the corresponding language type according to the user's language type.
-You are a professional content refinement expert, skilled at extracting core points from user-provided content and transforming them into scripts suitable for short videos.
+
+CONTENT_NARRATION_TEMPLATE = """# Mandatory Language Rule (CRITICAL & HIGHEST PRIORITY)
+First, identify the exact language of the source content.
+You MUST write and output ALL {n_storyboard} storyboard narrations in the EXACT SAME LANGUAGE as the source content.
+- If the source content is in Chinese (中文), you MUST output all narrations in 100% fluent, natural Chinese (严禁输出英文).
+- If the source content is in English, you MUST output all narrations in English.
+
+# Role Definition
+You are a master short-video script editor. You excel at extracting core insights from source text and restructuring them into punchy, spoken-style short video scripts with high viewer retention and coherent narrative flow.
 
 # Core Task
-The user will provide content (which may be long or short), and you need to extract narrations for {n_storyboard} video storyboards (for TTS to generate video audio).
+The user will provide source content. Distill and restructure it into {n_storyboard} scene-by-scene narrations for TTS voiceover generation.
 
-# User-Provided Content
+# Source Content
 {content}
 
-# Output Requirements
+{genre_section}
+{custom_prompt_section}
 
-## Narration Specifications
-- Language consistency requirement: Strictly output copy according to the user's input language type - if input is English, output must be English, and so on
-- Purpose: For TTS to generate short video audio
-- Word count limit: Strictly control to {min_words}~{max_words} words (minimum not less than {min_words} words)
-- Ending format: Do not use punctuation at the end
-- Refinement strategy:
-  * If user content is long: Extract {n_storyboard} core points, remove redundant information
-  * If user content is short: Appropriately expand while retaining core viewpoints, add examples or explanations
-  * If user content is just right: Optimize expression to make it more suitable for voice narration
-- Style requirement: Maintain the core viewpoint of user content, but express it in a more colloquial way suitable for TTS
-- Opening suggestion: The first storyboard can use a question or scene introduction to attract audience attention
-- Core content: Middle storyboards expand on the core points of user content
-- Ending suggestion: The last storyboard provides a summary or inspiration
-- Emotion and tone: Gentle, sincere, natural, like sharing viewpoints with a friend
-- Prohibitions: No URLs, emojis, numeric numbering, no empty talk or clichés
-- Word count check: After generation, must self-verify that each segment is not less than {min_words} words
+# Narrative Arc & Logical Progression Guidelines
+1. **Scene 1 (The 3-Second Golden Hook)**: Extract the most captivating conclusion, counter-intuitive insight, or core dilemma from the content as a piercing 3-second opening hook.
+2. **Intermediate Scenes (Coherent Logic & Punchy Elaboration)**: 
+   - Ensure seamless logical transitions from scene to scene, creating a continuous narrative chain.
+   - Unpack key arguments and core mechanisms step-by-step, removing written fluff while maintaining high information density and spoken cadence.
+3. **Final Scene (Summary & Follow CTA)**: 
+   - Summarize the core essence into an actionable takeaway or memorable cognitive payoff.
+   - **MANDATORY**: The final narration **MUST end with 1-2 natural, authentic sentences prompting the viewer to follow/subscribe**.
 
-## Storyboard Coherence Requirements
-- {n_storyboard} storyboards should expand based on the core viewpoint of user content, forming a complete expression
-- Maintain logical coherence and natural transitions
-- Each storyboard should sound like the same person narrating, with consistent tone
-- Ensure the refined content is faithful to the user's original meaning, but more suitable for short video presentation
+# Spoken Rhythm & Short-Video Retention Requirements
+- **Language Consistency (STRICT)**: Output copy MUST match the language of the source content.
+- **Word Count**: Strictly control each narration between {min_words} and {max_words} words (minimum {min_words} words).
+- **Spoken Punctuation**: Use natural punctuation (, 。 ? ! ……) to control voiceover breathing, pauses, and cadence. Do NOT end narrations with dangling commas.
+- **Tone & Delivery**: Accessible, sincere, crisp, and conversational. Reject academic jargon and bureaucratic phrasing.
+- **Prohibitions**: No markdown headers, no scene labels in narration text, no URLs, no emoji in voiceover, no numbering.
 
 # Output Format
-Strictly output in the following JSON format, do not add any additional text explanations:
+Strictly output in the following JSON format, without any surrounding commentary:
 
 ```json
 {{
   "narrations": [
-    "First {min_words}~{max_words} word narration",
-    "Second {min_words}~{max_words} word narration",
-    "Third {min_words}~{max_words} word narration"
+    "First narration (Scene 1: 3-Second Golden Hook)",
+    "Second narration (Scene 2: Core Context & Problem)",
+    "Third narration (Scene 3: Deep Insight & Key Point)",
+    "Fourth narration (Scene 4: Elaboration & Impact)",
+    "Fifth narration (Scene 5: Summary + Natural Follow CTA in the last 1-2 sentences)"
   ]
 }}
 ```
 
-# Important Reminders
-1. Only output JSON format content, do not add any explanations
-2. Ensure JSON format is strictly correct and can be directly parsed by the program
-3. Narrations must be strictly controlled between {min_words}~{max_words} words
-4. Must output exactly {n_storyboard} storyboard narrations
-5. Content must be faithful to the user's original meaning, but optimized for voice narration expression
-6. Output format is {{"narrations": [narration array]}} JSON object
-
-Now, please extract {n_storyboard} storyboard narrations from the above content. Only output JSON, no other content.
+**CRITICAL**: Return ONLY the valid JSON object containing exactly {n_storyboard} string elements in the "narrations" array.
 """
+
 
 
 def build_content_narration_prompt(
     content: str,
-    n_storyboard: int,
-    min_words: int,
-    max_words: int
+    n_storyboard: int = 5,
+    min_words: int = 5,
+    max_words: int = 20,
+    genre: str = "general",
+    custom_prompt: str = "",
 ) -> str:
     """
     Build content refinement narration prompt
     
     Args:
         content: User-provided content
-        n_storyboard: Number of storyboard frames
-        min_words: Minimum word count
-        max_words: Maximum word count
+        n_storyboard: Number of storyboard frames (default: 5)
+        min_words: Minimum word count per narration
+        max_words: Maximum word count per narration
+        genre: Genre style hint (default: 'general')
+        custom_prompt: Additional user guidance or specific requirements
     
     Returns:
         Formatted prompt
     """
-    return CONTENT_NARRATION_PROMPT.format(
-        content=content,
+    genre_section = ""
+    if genre and genre not in ("general", "auto"):
+        from trendlume.prompts.topic_narration import GENRE_INSTRUCTIONS
+        if genre in GENRE_INSTRUCTIONS:
+            genre_section = f"# Track / Genre Style Guide ({genre})\n{GENRE_INSTRUCTIONS[genre]}\n"
+
+    if custom_prompt and custom_prompt.strip():
+        custom_prompt_section = f"# Additional User Requirements\n{custom_prompt.strip()}\n"
+    else:
+        custom_prompt_section = ""
+        
+    return CONTENT_NARRATION_TEMPLATE.format(
+        content=content.strip(),
         n_storyboard=n_storyboard,
         min_words=min_words,
-        max_words=max_words
-    )
+        max_words=max_words,
+        genre_section=genre_section,
+        custom_prompt_section=custom_prompt_section,
+    ).strip()
+
 

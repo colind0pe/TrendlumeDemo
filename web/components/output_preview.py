@@ -16,6 +16,7 @@ Output preview components for web UI (right column)
 
 import base64
 import os
+import traceback
 from pathlib import Path
 
 import streamlit as st
@@ -56,6 +57,11 @@ def render_single_output(trendlume, video_params):
     tts_speed = video_params.get("tts_speed")
     tts_workflow_key = video_params.get("tts_workflow")
     ref_audio_path = video_params.get("ref_audio")
+    
+    enable_research = video_params.get("enable_research")
+    genre = video_params.get("genre", "auto")
+    hook_type = video_params.get("hook_type")
+    custom_prompt = video_params.get("custom_prompt", "")
     
     frame_template = video_params.get("frame_template")
     custom_values_for_video = video_params.get("template_params", {})
@@ -135,12 +141,16 @@ def render_single_output(trendlume, video_params):
                 
                 # Generate video (directly pass parameters)
                 # Note: media_width and media_height are auto-determined from template
-                video_params = {
+                generate_params = {
                     "text": text,
                     "mode": mode,
                     "title": title if title else None,
                     "n_scenes": n_scenes,
                     "split_mode": split_mode,
+                    "genre": genre,
+                    "hook_type": hook_type,
+                    "custom_prompt": custom_prompt,
+                    "enable_research": enable_research,
                     "media_workflow": workflow_key,
                     "api_video_params": api_video_params,
                     "frame_template": frame_template,
@@ -152,20 +162,20 @@ def render_single_output(trendlume, video_params):
                     "media_height": st.session_state.get('template_media_height'),
                 }
                 # Add TTS parameters based on mode
-                video_params["tts_inference_mode"] = tts_mode
+                generate_params["tts_inference_mode"] = tts_mode
                 if tts_mode == "local":
-                    video_params["tts_voice"] = selected_voice
-                    video_params["tts_speed"] = tts_speed
+                    generate_params["tts_voice"] = selected_voice
+                    generate_params["tts_speed"] = tts_speed
                 else:  # comfyui
-                    video_params["tts_workflow"] = tts_workflow_key
+                    generate_params["tts_workflow"] = tts_workflow_key
                     if ref_audio_path:
-                        video_params["ref_audio"] = str(ref_audio_path)
+                        generate_params["ref_audio"] = str(ref_audio_path)
                 
                 # Add custom template parameters if any
                 if custom_values_for_video:
-                    video_params["template_params"] = custom_values_for_video
+                    generate_params["template_params"] = custom_values_for_video
                 
-                result = run_async(trendlume.generate_video(**video_params))
+                result = run_async(trendlume.generate_video(**generate_params))
                 
                 # Calculate total generation time
                 total_generation_time = time.time() - start_time
@@ -212,41 +222,32 @@ def render_single_output(trendlume, video_params):
                             use_container_width=True
                         )
                 else:
-                    st.error(tr("status.video_not_found", path=result.video_path))
-                
+                    st.warning(tr("status.video_not_found", path=result.video_path))
+                    
             except Exception as e:
-                status_text.text("")
-                progress_bar.empty()
+                error_trace = traceback.format_exc()
+                logger.error(f"Generation error: {e}\n{error_trace}")
                 st.error(tr("status.error", error=str(e)))
-                logger.exception(e)
-                st.stop()
+                with st.expander("Error Details", expanded=False):
+                    st.code(error_trace)
 
 
 def render_batch_output(trendlume, video_params):
-    """Render batch generation output (minimal, redirect to History)"""
+    """Render batch video generation output (Simplified YAGNI version)"""
     topics = video_params.get("topics", [])
+    batch_count = len(topics)
     
     with st.container(border=True):
-        st.markdown(f"**{tr('batch.section_generation')}**")
+        st.markdown(f"**{tr('section.video_generation')}**")
         
-        # Check if topics are provided
-        if not topics:
-            st.warning(tr("batch.no_topics"))
-            return
-        
-        # Check system configuration
+        # Check if system is configured
         if not config_manager.validate():
             st.warning(tr("settings.not_configured"))
+        
+        # Check if topics exist
+        if batch_count == 0:
+            st.info(tr("batch.no_topics_hint"))
             return
-        
-        batch_count = len(topics)
-        
-        # Display batch info
-        st.info(tr("batch.prepare_info", count=batch_count))
-        
-        # Estimated time (optional)
-        estimated_minutes = batch_count * 3  # Assume 3 minutes per video
-        st.caption(tr("batch.estimated_time", minutes=estimated_minutes))
         
         # Generate button with batch semantics
         if st.button(
@@ -259,6 +260,10 @@ def render_batch_output(trendlume, video_params):
             shared_config = {
                 "title_prefix": video_params.get("title_prefix"),
                 "n_scenes": video_params.get("n_scenes") or 5,
+                "genre": video_params.get("genre", "auto"),
+                "hook_type": video_params.get("hook_type"),
+                "custom_prompt": video_params.get("custom_prompt", ""),
+                "enable_research": video_params.get("enable_research"),
                 "media_workflow": video_params.get("media_workflow"),
                 "api_video_params": video_params.get("api_video_params"),
                 "frame_template": video_params.get("frame_template"),

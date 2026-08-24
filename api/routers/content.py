@@ -25,12 +25,15 @@ from api.schemas.content import (
     NarrationGenerateResponse,
     ImagePromptGenerateRequest,
     ImagePromptGenerateResponse,
+    VideoPromptGenerateRequest,
+    VideoPromptGenerateResponse,
     TitleGenerateRequest,
     TitleGenerateResponse,
 )
 from trendlume.utils.content_generators import (
     generate_narrations_from_topic,
     generate_image_prompts,
+    generate_video_prompts,
     generate_title,
 )
 
@@ -45,30 +48,35 @@ async def generate_narration(
     """
     Generate narrations from text
     
-    Uses LLM to break down text into multiple narration segments.
+    Uses LLM to break down text into multiple narration segments with golden hooks and multi-genre support.
     
     - **text**: Source text
     - **n_scenes**: Number of narrations to generate
     - **min_words**: Minimum words per narration
     - **max_words**: Maximum words per narration
+    - **genre**: Track/genre style
+    - **hook_type**: Golden hook strategy
+    - **custom_prompt**: Additional user guidance
     
     Returns list of narration strings.
     """
     try:
-        logger.info(f"Generating {request.n_scenes} narrations from text")
+        logger.info(f"Generating {request.n_scenes} narrations from text (genre={request.genre}, hook={request.hook_type})")
         
-        # Call narration generator utility function
         narrations = await generate_narrations_from_topic(
             llm_service=trendlume.llm,
             topic=request.text,
             n_scenes=request.n_scenes,
             min_words=request.min_words,
-            max_words=request.max_words
+            max_words=request.max_words,
+            genre=request.genre,
+            hook_type=request.hook_type,
+            custom_prompt=request.custom_prompt,
+            research_service=getattr(trendlume, "research", None),
+            enable_research=request.enable_research,
         )
         
-        return NarrationGenerateResponse(
-            narrations=narrations
-        )
+        return NarrationGenerateResponse(narrations=narrations)
         
     except Exception as e:
         logger.error(f"Narration generation error: {e}")
@@ -83,31 +91,67 @@ async def generate_image_prompt(
     """
     Generate image prompts from narrations
     
-    Uses LLM to create detailed image generation prompts.
+    Uses LLM to create detailed image generation prompts with shot types and aesthetic presets.
     
     - **narrations**: List of narration texts
     - **min_words**: Minimum words per prompt
     - **max_words**: Maximum words per prompt
+    - **style_preset**: Image style preset key
+    - **custom_style_prefix**: Custom style prompt prefix
     
     Returns list of image prompts.
     """
     try:
-        logger.info(f"Generating image prompts for {len(request.narrations)} narrations")
+        logger.info(f"Generating image prompts for {len(request.narrations)} narrations (style={request.style_preset})")
         
-        # Call image prompt generator utility function
         image_prompts = await generate_image_prompts(
             llm_service=trendlume.llm,
             narrations=request.narrations,
             min_words=request.min_words,
-            max_words=request.max_words
+            max_words=request.max_words,
+            style_preset=request.style_preset,
+            custom_style_prefix=request.custom_style_prefix,
         )
         
-        return ImagePromptGenerateResponse(
-            image_prompts=image_prompts
-        )
+        return ImagePromptGenerateResponse(image_prompts=image_prompts)
         
     except Exception as e:
         logger.error(f"Image prompt generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/video-prompt", response_model=VideoPromptGenerateResponse)
+async def generate_video_prompt(
+    request: VideoPromptGenerateRequest,
+    trendlume: TrendlumeDep
+):
+    """
+    Generate video prompts from narrations
+    
+    Uses LLM to create dynamic video generation prompts with camera motions and dynamic physics.
+    
+    - **narrations**: List of narration texts
+    - **min_words**: Minimum words per prompt
+    - **max_words**: Maximum words per prompt
+    - **custom_style_prefix**: Custom style prompt prefix
+    
+    Returns list of video prompts.
+    """
+    try:
+        logger.info(f"Generating video prompts for {len(request.narrations)} narrations")
+        
+        video_prompts = await generate_video_prompts(
+            llm_service=trendlume.llm,
+            narrations=request.narrations,
+            min_words=request.min_words,
+            max_words=request.max_words,
+            custom_style_prefix=request.custom_style_prefix,
+        )
+        
+        return VideoPromptGenerateResponse(video_prompts=video_prompts)
+        
+    except Exception as e:
+        logger.error(f"Video prompt generation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -129,18 +173,14 @@ async def generate_title_endpoint(
     try:
         logger.info("Generating title from text")
         
-        # Call title generator utility function
         title = await generate_title(
             llm_service=trendlume.llm,
             content=request.text,
             strategy="llm"
         )
         
-        return TitleGenerateResponse(
-            title=title
-        )
+        return TitleGenerateResponse(title=title)
         
     except Exception as e:
         logger.error(f"Title generation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-

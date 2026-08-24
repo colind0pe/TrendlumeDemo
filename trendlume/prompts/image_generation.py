@@ -13,33 +13,42 @@
 """
 Image prompt generation template
 
-For generating image prompts from narrations.
+For generating expressive, symbolic, and cinematic image prompts from narrations,
+integrating visual storytelling, symbolic metaphors, style presets, and strict subject completeness.
 """
 
 import json
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 # ==================== PRESET IMAGE STYLES ====================
 # Predefined visual styles for different use cases
 
-IMAGE_STYLE_PRESETS = {
+IMAGE_STYLE_PRESETS: Dict[str, Dict[str, str]] = {
     "stick_figure": {
-        "name": "Stick Figure Sketch",
-        "description": "stick figure style sketch, black and white lines, pure white background, minimalist hand-drawn feel",
-        "use_case": "General scenes, simple and intuitive"
+        "name": "简约火柴人",
+        "description": "Minimalist black ink stick figure line art, clean pure white background, hand-drawn sketch style, fully framed subject, zero clutter, no text",
+        "use_case": "General explainer, conceptual, simple and intuitive"
     },
-    
-    "minimal": {
-        "name": "Minimalist Abstract",
-        "description": "minimalist abstract art, geometric shapes, clean composition, modern design, soft pastel colors",
-        "use_case": "Modern, artistic feel"
+    "minimalist_line_art": {
+        "name": "简笔画",
+        "description": "Universal minimalist line art illustration, clean hand-drawn fluid contours, subtle flat color accents, strictly 1-3 focal elements, ample negative space, clear margins, no text",
+        "use_case": "Versatile explainer, business insights, science concepts, daily life philosophy, emotional stories"
     },
-    
-    "concept": {
-        "name": "Conceptual Visual",
-        "description": "conceptual visual metaphors, symbolic elements, thought-provoking imagery, artistic interpretation",
-        "use_case": "Deep content, philosophical thinking"
+    "chinese_ink": {
+        "name": "中国水墨画",
+        "description": "Traditional Chinese ink wash painting aesthetic, guochao style, elegant fluid brush strokes, poetic composition, ample harmonious negative space (留白), atmospheric mist, zen tranquility, no text",
+        "use_case": "Eastern culture, humanities, Zen, philosophy, traditional history"
+    },
+    "cinematic_real": {
+        "name": "电影写实",
+        "description": "Cinematic 8k photograph, 35mm lens, shallow depth of field separating centered subject from soft uncluttered backdrop, dramatic chiaroscuro lighting, rich textures, no text",
+        "use_case": "Realistic storytelling, historical, business, dramatic scenarios"
+    },
+    "animation": {
+        "name": "动画",
+        "description": "Vibrant clean animation art style, well-defined character silhouette centered in frame, smooth lighting, harmonious color palette, neat organized backdrop, no text",
+        "use_case": "Engaging storytelling, warm narratives, creative explainers, accessible concepts"
     },
 }
 
@@ -48,35 +57,37 @@ DEFAULT_IMAGE_STYLE = "stick_figure"
 
 
 IMAGE_PROMPT_GENERATION_PROMPT = """# Role Definition
-You are a professional visual creative designer, skilled at creating expressive and symbolic image prompts for video scripts, transforming abstract concepts into concrete visual scenes.
+You are a master visual art director and creative designer, skilled at creating expressive, evocative, and symbolic image generation prompts (Midjourney / FLUX / DALL-E / SDXL) for video scripts, transforming narrative concepts into concrete, compelling visual scenes.
 
 # Core Task
 Based on the existing video script, create corresponding **English** image prompts for each storyboard's "narration content", ensuring visual scenes perfectly match the narrative content and enhance audience understanding and memory.
 
 **Important: The input contains {narrations_count} narrations. You must generate one corresponding image prompt for each narration, totaling {narrations_count} image prompts.**
 
-# Input Content
+# Input Content (Narrations)
 {narrations_json}
+
+{style_hint_section}
 
 # Output Requirements
 
 ## Image Prompt Specifications
 - Language: **Must use English** (for AI image generation models)
-- Description structure: scene + character action + emotion + symbolic elements
-- Description length: Ensure clear, complete, and creative descriptions (recommended 50-100 English words)
+- Description structure: `[Subject & Character Action]` + `[Scene / Environment & Context]` + `[Composition & Camera Framing]` + `[Lighting & Atmosphere]` + `[Symbolic Elements]`
+- Description length: Ensure clear, complete, and creative descriptions (strictly **{min_words} to {max_words} English words** per prompt)
 
 ## Visual Creative Requirements
 - Each image must accurately reflect the specific content and emotion of the corresponding narration
-- Use symbolic techniques to visualize abstract concepts (e.g., use paths to represent life choices, chains to represent constraints, etc.)
-- Scenes should express rich emotions and actions to enhance visual impact
-- Highlight themes through composition and element arrangement, avoid overly literal representations
+- **Use symbolic techniques to visualize abstract concepts** (e.g., use diverging paths to represent life choices, chains/cages to represent constraints, an hourglass/flowing water to represent time, ancient jade/bronze objects to represent cultural heritage, climbing stairs/mountain peaks to represent growth and breakthroughs)
+- Scenes should express rich emotions and purposeful actions to enhance visual impact
+- Highlight themes through composition and element arrangement; avoid overly literal word-for-word translation
 
 ## Key English Vocabulary Reference
-- Symbolic elements: symbolic elements
-- Expression: expression / facial expression
-- Action: action / gesture / movement
-- Scene: scene / setting
-- Atmosphere: atmosphere / mood
+- **Symbolic elements**: symbolic elements, metaphor, hourglass, crossroads, glowing compass, blooming flower, breaking chains, ancient manuscript
+- **Expression & Emotion**: contemplative, determined, serene, intense, curious, awe-inspired, nostalgic
+- **Action & Movement**: examining, holding gently, reaching forward, observing from afar, striding purposefully, standing resolute
+- **Scene & Environment**: ancient wooden study, misty mountain peak, bustling modern metropolis, open horizon, minimalist gallery
+- **Lighting & Atmosphere**: soft golden hour sunlight, dramatic chiaroscuro, cinematic rim lighting, serene ambient glow, misty atmospheric depth
 
 ## Visual and Copy Coordination Principles
 - Images should serve the copy, becoming a visual extension of the copy content
@@ -91,52 +102,44 @@ Based on the existing video script, create corresponding **English** image promp
 4. **In-depth Discussion Copy**: Use concretization of abstract concepts to represent deep thinking
 5. **Conclusion Inspiration Copy**: Use open-ended scenes or guiding elements to represent inspiration
 
-# Output Format
-Strictly output in the following JSON format, **image prompts must be in English**:
+## Core Rules & Prohibitions
+1. **Subject Completeness**: Ensure the primary subject is **fully contained within the frame** with balanced breathing room around the edges. Avoid awkward cropping, cut-off heads, or severed limbs.
+2. **Visual Restraint**: Limit each scene to **1 to 3 core focal elements** with clean negative space. Never overload the image with noisy, chaotic props or busy background debris.
+3. **No Text / Watermark**: Strictly forbid any written words, letters, subtitles, signatures, watermarks, or logos in the image (always append `no text, no watermark`).
+4. **Output Constraints**: Output ONLY a valid JSON object with key `"image_prompts"`.
 
+# Expected JSON Output Format
 ```json
 {{
   "image_prompts": [
-    "[detailed English image prompt following the style requirements]",
-    "[detailed English image prompt following the style requirements]"
+    "A dramatic centered medium close-up of a contemplative young scholar holding a translucent jade pendant in an ancient wooden study, soft moonlight filtering through paper blinds, bronze incense burner on a desk, cinematic chiaroscuro lighting, ample negative space, fully framed, no text, no watermark",
+    "A lone traveler standing on the crest of a golden sand dune overlooking an open horizon, warm sunrise lighting, vast sky with generous breathing room, centered silhouette, poetic peaceful atmosphere, fully framed, no text, no watermark"
   ]
 }}
 ```
 
-# Important Reminders
-1. Only output JSON format content, do not add any explanations
-2. Ensure JSON format is strictly correct and can be directly parsed by the program
-3. Input is {{"narrations": [narration array]}} format, output is {{"image_prompts": [image prompt array]}} format
-4. **The output image_prompts array must contain exactly {narrations_count} elements, corresponding one-to-one with the input narrations array**
-5. **Image prompts must use English** (for AI image generation models)
-6. Image prompts must accurately reflect the specific content and emotion of the corresponding narration
-7. Each image must be creative and visually impactful, avoid being monotonous
-8. Ensure visual scenes can enhance the persuasiveness of the copy and audience understanding
-
-Now, please create {narrations_count} corresponding **English** image prompts for the above {narrations_count} narrations. Only output JSON, no other content.
-"""
+Now, please create {narrations_count} corresponding **English** image prompts for the above {narrations_count} narrations. Only output JSON, no other content."""
 
 
 def build_image_prompt_prompt(
     narrations: List[str],
-    min_words: int,
-    max_words: int
+    min_words: int = 30,
+    max_words: int = 60,
+    style_preset: Optional[str] = None,
+    custom_style_prefix: str = "",
 ) -> str:
     """
-    Build image prompt generation prompt
-    
-    Note: Style/prefix will be applied later via prompt_prefix in config.
+    Build prompt for generating image prompts from narrations with optional style preset
     
     Args:
-        narrations: List of narrations
-        min_words: Minimum word count
-        max_words: Maximum word count
+        narrations: List of narration strings
+        min_words: Minimum word count per prompt
+        max_words: Maximum word count per prompt
+        style_preset: Optional style preset key from IMAGE_STYLE_PRESETS
+        custom_style_prefix: Optional custom prompt prefix
     
     Returns:
         Formatted prompt for LLM
-    
-    Example:
-        >>> build_image_prompt_prompt(narrations, 50, 100)
     """
     narrations_json = json.dumps(
         {"narrations": narrations},
@@ -144,10 +147,17 @@ def build_image_prompt_prompt(
         indent=2
     )
     
+    style_hint_section = ""
+    if style_preset and style_preset in IMAGE_STYLE_PRESETS:
+        preset = IMAGE_STYLE_PRESETS[style_preset]
+        style_hint_section = f"# Target Visual Aesthetic ({preset['name']})\n{preset['description']}\n"
+    elif custom_style_prefix and custom_style_prefix.strip():
+        style_hint_section = f"# Target Visual Aesthetic\n{custom_style_prefix.strip()}\n"
+    
     return IMAGE_PROMPT_GENERATION_PROMPT.format(
         narrations_json=narrations_json,
         narrations_count=len(narrations),
         min_words=min_words,
-        max_words=max_words
-    )
-
+        max_words=max_words,
+        style_hint_section=style_hint_section,
+    ).strip()

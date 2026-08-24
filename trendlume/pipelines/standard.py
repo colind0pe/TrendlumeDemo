@@ -50,8 +50,6 @@ from trendlume.utils.prompt_helper import build_image_prompt
 from trendlume.services.video import VideoService
 
 
-
-
 class StandardPipeline(LinearVideoPipeline):
     """
     Standard video generation pipeline
@@ -118,7 +116,12 @@ class StandardPipeline(LinearVideoPipeline):
                 topic=text,
                 n_scenes=n_scenes,
                 min_words=min_words,
-                max_words=max_words
+                max_words=max_words,
+                genre=ctx.params.get("genre", "auto"),
+                hook_type=ctx.params.get("hook_type"),
+                custom_prompt=ctx.params.get("custom_prompt", ""),
+                research_service=getattr(self.core, "research", None),
+                enable_research=ctx.params.get("enable_research"),
             )
             logger.info(f"✅ Generated {len(ctx.narrations)} narrations")
         else:  # fixed
@@ -161,18 +164,19 @@ class StandardPipeline(LinearVideoPipeline):
         template_requires_media = (template_type in ["image", "video"])
         
         if template_type == "image":
-            logger.info(f"📸 Template requires image generation")
+            logger.info("📸 Template requires image generation")
         elif template_type == "video":
-            logger.info(f"🎬 Template requires video generation")
+            logger.info("🎬 Template requires video generation")
         else:  # static
-            logger.info(f"⚡ Static template - skipping media generation pipeline")
-            logger.info(f"   💡 Benefits: Faster generation + Lower cost + No ComfyUI dependency")
+            logger.info("⚡ Static template - skipping media generation pipeline")
+            logger.info("   💡 Benefits: Faster generation + Lower cost + No ComfyUI dependency")
         
         # Only generate image prompts if template requires media
         if template_requires_media:
             self._report_progress(ctx.progress_callback, "generating_image_prompts", 0.15)
             
             prompt_prefix = ctx.params.get("prompt_prefix")
+            style_preset = ctx.params.get("style_preset")
             min_words = ctx.params.get("min_image_prompt_words", 30)
             max_words = ctx.params.get("max_image_prompt_words", 60)
             
@@ -202,9 +206,11 @@ class StandardPipeline(LinearVideoPipeline):
                     narrations=ctx.narrations,
                     min_words=min_words,
                     max_words=max_words,
-                    progress_callback=image_prompt_progress
+                    progress_callback=image_prompt_progress,
+                    style_preset=style_preset,
+                    custom_style_prefix=prompt_prefix or "",
                 )
-                
+
                 # Apply prompt prefix
                 image_config = self.core.config.get("comfyui", {}).get("image", {})
                 prompt_prefix_to_use = prompt_prefix if prompt_prefix is not None else image_config.get("prompt_prefix", "")
@@ -223,7 +229,7 @@ class StandardPipeline(LinearVideoPipeline):
         else:
             # Static template - skip image prompt generation entirely
             ctx.image_prompts = [None] * len(ctx.narrations)
-            logger.info(f"⚡ Skipped image prompt generation (static template)")
+            logger.info("⚡ Skipped image prompt generation (static template)")
             logger.info(f"   💡 Savings: {len(ctx.narrations)} LLM calls + {len(ctx.narrations)} media generations")
 
     async def initialize_storyboard(self, ctx: PipelineContext):

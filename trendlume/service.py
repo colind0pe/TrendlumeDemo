@@ -35,6 +35,7 @@ from trendlume.services.video import VideoService
 from trendlume.services.frame_processor import FrameProcessor
 from trendlume.services.persistence import PersistenceService
 from trendlume.services.history_manager import HistoryManager
+from trendlume.research.service import ResearchService
 from trendlume.pipelines.standard import StandardPipeline
 from trendlume.pipelines.custom import CustomPipeline
 from trendlume.pipelines.asset_based import AssetBasedPipeline
@@ -97,6 +98,7 @@ class TrendlumeCore:
         self.frame_processor: Optional[FrameProcessor] = None
         self.persistence: Optional[PersistenceService] = None
         self.history: Optional[HistoryManager] = None
+        self.research: Optional[ResearchService] = None
         
         # Video generation pipelines (dictionary of pipeline_name -> pipeline_instance)
         self.pipelines = {}
@@ -198,7 +200,9 @@ class TrendlumeCore:
         # 1. Initialize core services (ComfyKit will be lazy-loaded later)
         # Initialize services
         self.llm = LLMService(self.config)
+        self.research = ResearchService(llm_service=self.llm)
         self.tts = TTSService(self.config, core=self)
+
         self.api_media = APIProviderMediaService(self.config, core=self)
         self.media = MediaService(self.config, core=self)
         self.image = self.media  # Alias for backward compatibility
@@ -226,11 +230,18 @@ class TrendlumeCore:
     
     async def cleanup(self):
         """
-        Cleanup resources (close ComfyKit session)
+        Cleanup resources (close ComfyKit session and research provider)
         
         Example:
             await trendlume.cleanup()
         """
+        if self.research:
+            try:
+                await self.research.close()
+            except Exception as e:
+                logger.warning(f"Failed to close ResearchService: {e}")
+            self.research = None
+            
         if self._comfykit:
             logger.info("🧹 Closing ComfyKit session...")
             try:
@@ -241,7 +252,7 @@ class TrendlumeCore:
             finally:
                 self._comfykit = None
                 self._comfykit_config_hash = None
-    
+
     async def __aenter__(self):
         """Async context manager entry"""
         await self.initialize()

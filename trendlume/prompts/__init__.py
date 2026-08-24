@@ -17,16 +17,21 @@ Centralized prompt management for all LLM interactions.
 """
 
 # Narration prompts
-from trendlume.prompts.topic_narration import build_topic_narration_prompt
+from trendlume.prompts.topic_narration import (
+    build_topic_narration_prompt,
+    GENRE_INSTRUCTIONS,
+    HOOK_INSTRUCTIONS,
+)
 from trendlume.prompts.content_narration import build_content_narration_prompt
 from trendlume.prompts.title_generation import build_title_generation_prompt
 
-# Image prompts
+# Image & Video prompts
 from trendlume.prompts.image_generation import (
     build_image_prompt_prompt,
     IMAGE_STYLE_PRESETS,
-    DEFAULT_IMAGE_STYLE
+    DEFAULT_IMAGE_STYLE,
 )
+from trendlume.prompts.video_generation import build_video_prompt_prompt
 from trendlume.prompts.style_conversion import build_style_conversion_prompt
 
 
@@ -35,9 +40,12 @@ __all__ = [
     "build_topic_narration_prompt",
     "build_content_narration_prompt",
     "build_title_generation_prompt",
+    "GENRE_INSTRUCTIONS",
+    "HOOK_INSTRUCTIONS",
     
-    # Image builders
+    # Image & Video builders
     "build_image_prompt_prompt",
+    "build_video_prompt_prompt",
     "build_style_conversion_prompt",
     
     # Image style presets
