@@ -18,6 +18,7 @@ Provides data structures for media results, progress tracking, and storyboards.
 
 from trendlume.models.media import MediaResult
 from trendlume.models.progress import ProgressEvent
+from trendlume.models.project import Project, Task, TaskStatus
 from trendlume.models.storyboard import (
     ContentMetadata,
     Storyboard,
@@ -29,6 +30,9 @@ from trendlume.models.storyboard import (
 __all__ = [
     "MediaResult",
     "ProgressEvent",
+    "Project",
+    "Task",
+    "TaskStatus",
     "StoryboardConfig",
     "StoryboardFrame",
     "ContentMetadata",

@@ -22,7 +22,11 @@ Services:
 - VideoService: Video processing
 - FrameProcessor: Frame processing orchestrator
 - PersistenceService: Task metadata and storyboard persistence
-- HistoryManager: History management business logic
+- TaskManager: Individual task operations
+- ProjectManager: Project lifecycle and task-project relationships
+- HistoryManager: Legacy compatibility layer (subclass of TaskManager)
+- HistoryMigrationService: Legacy history to project migration
+- TaskScheduler: Lightweight scheduled task execution
 - ComfyBaseService: Base class for ComfyUI-based services
 """
 
@@ -33,7 +37,11 @@ from trendlume.services.media import MediaService
 from trendlume.services.video import VideoService
 from trendlume.services.frame_processor import FrameProcessor
 from trendlume.services.persistence import PersistenceService
+from trendlume.services.task_manager import TaskManager
 from trendlume.services.history_manager import HistoryManager
+from trendlume.services.project_manager import ProjectManager
+from trendlume.services.history_migration import HistoryMigrationService, MigrationResult
+from trendlume.services.task_scheduler import TaskScheduler
 
 # Backward compatibility alias
 ImageService = MediaService
@@ -47,6 +55,11 @@ __all__ = [
     "VideoService",
     "FrameProcessor",
     "PersistenceService",
-    "HistoryManager",
+    "TaskManager",
+    "HistoryManager",  # Legacy compatibility
+    "ProjectManager",
+    "HistoryMigrationService",
+    "MigrationResult",
+    "TaskScheduler",
 ]
 

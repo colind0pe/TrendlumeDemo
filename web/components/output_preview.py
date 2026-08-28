@@ -14,18 +14,16 @@
 Output preview components for web UI (right column)
 """
 
-import base64
 import os
 import traceback
-from pathlib import Path
 
 import streamlit as st
 from loguru import logger
 
-from web.i18n import tr, get_language
-from web.utils.async_helpers import run_async
-from trendlume.models.progress import ProgressEvent
 from trendlume.config import config_manager
+from trendlume.models.progress import ProgressEvent
+from web.i18n import get_language, tr
+from web.utils.async_helpers import run_async
 
 
 def render_output_preview(trendlume, video_params):
@@ -157,6 +155,7 @@ def render_single_output(trendlume, video_params):
                     "prompt_prefix": prompt_prefix,
                     "bgm_path": bgm_path,
                     "bgm_volume": bgm_volume if bgm_path else 0.2,
+                    "project_id": video_params.get("project_id"),
                     "progress_callback": update_progress,
                     "media_width": st.session_state.get('template_media_width'),
                     "media_height": st.session_state.get('template_media_height'),
@@ -347,8 +346,9 @@ def render_batch_output(trendlume, video_params):
                 return callback
             
             # Execute batch generation
-            from web.utils.batch_manager import SimpleBatchManager
             import time
+
+            from web.utils.batch_manager import SimpleBatchManager
             
             batch_manager = SimpleBatchManager()
             start_time = time.time()
@@ -392,7 +392,7 @@ def render_batch_output(trendlume, video_params):
             # Button to go to History page using JavaScript URL navigation
             st.markdown(
                 f"""
-                <a href="/History" target="_blank">
+                <a href="/Projects" target="_blank">
                     <button style="
                         width: 100%;
                         padding: 0.5rem 1rem;
@@ -405,7 +405,7 @@ def render_batch_output(trendlume, video_params):
                         font-weight: 400;
                         text-align: center;
                     ">
-                        📚 {tr('batch.goto_history')}
+                        📁 {tr('project.page_title')}
                     </button>
                 </a>
                 """,

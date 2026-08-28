@@ -17,15 +17,14 @@ Orchestrates multi-query web search, result normalization, URL deduplication,
 context synthesis, and safe fallback handling.
 """
 
-import os
-import json
-import re
 import asyncio
-from typing import List, Optional, Dict, Any
+import os
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
 from loguru import logger
 
-from trendlume.research.models import SearchResult, ResearchContext
+from trendlume.research.models import ResearchContext, SearchResult
 from trendlume.research.provider import SearchProvider, TavilySearchProvider
 
 
@@ -73,7 +72,12 @@ class ResearchService:
                     pass
             return val
 
-        # 2. Check global config_manager (supports hot-reload from UI / file)
+        # 2. Check explicit instance config dict (if provided at construction)
+        if self._config_dict and "research" in self._config_dict:
+            if key in self._config_dict["research"]:
+                return self._config_dict["research"][key]
+
+        # 3. Check global config_manager (supports hot-reload from UI / file)
         try:
             from trendlume.config import config_manager
             cfg_val = getattr(config_manager.config.research, key, None)
@@ -81,10 +85,6 @@ class ResearchService:
                 return cfg_val
         except Exception:
             pass
-
-        # 3. Fallback to explicit instance config dict (if provided at construction)
-        if self._config_dict and "research" in self._config_dict:
-            return self._config_dict["research"].get(key, default)
 
         return default
 

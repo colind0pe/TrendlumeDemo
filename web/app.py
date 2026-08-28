@@ -47,14 +47,14 @@ def main():
         default=True
     )
     
-    history_page = st.Page(
-        "pages/2_📚_History.py",
-        title="History",
-        icon="📚"
+    projects_page = st.Page(
+        "pages/2_📁_Projects.py",
+        title="Projects",
+        icon="📁"
     )
     
     # Set up navigation and run
-    pg = st.navigation([home_page, history_page])
+    pg = st.navigation([home_page, projects_page])
     pg.run()
 
 

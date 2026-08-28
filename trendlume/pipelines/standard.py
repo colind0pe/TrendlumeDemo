@@ -18,36 +18,31 @@ This is the default pipeline for general-purpose video generation.
 Refactored to use LinearVideoPipeline (Template Method Pattern).
 """
 
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Callable, Literal, List
 import asyncio
 import shutil
+from datetime import datetime
+from pathlib import Path
 
 from loguru import logger
 
-from trendlume.pipelines.linear import LinearVideoPipeline, PipelineContext
 from trendlume.models.progress import ProgressEvent
 from trendlume.models.storyboard import (
     Storyboard,
-    StoryboardFrame,
     StoryboardConfig,
-    ContentMetadata,
-    VideoGenerationResult
+    StoryboardFrame,
+    VideoGenerationResult,
 )
-from trendlume.utils.content_generators import (
-    generate_title,
-    generate_narrations_from_topic,
-    split_narration_script,
-    generate_image_prompts,
-)
-from trendlume.utils.os_util import (
-    create_task_output_dir,
-    get_task_final_video_path
-)
-from trendlume.utils.template_util import get_template_type
-from trendlume.utils.prompt_helper import build_image_prompt
+from trendlume.pipelines.linear import LinearVideoPipeline, PipelineContext
 from trendlume.services.video import VideoService
+from trendlume.utils.content_generators import (
+    generate_image_prompts,
+    generate_narrations_from_topic,
+    generate_title,
+    split_narration_script,
+)
+from trendlume.utils.os_util import create_task_output_dir, get_task_final_video_path
+from trendlume.utils.prompt_helper import build_image_prompt
+from trendlume.utils.template_util import get_template_type
 
 
 class StandardPipeline(LinearVideoPipeline):
@@ -82,7 +77,7 @@ class StandardPipeline(LinearVideoPipeline):
         logger.info(f"   Text length: {len(text)} chars")
         
         # Create isolated task directory
-        task_dir, task_id = create_task_output_dir()
+        task_dir, task_id = create_task_output_dir(task_id=ctx.params.get("task_id"))
         ctx.task_id = task_id
         ctx.task_dir = task_dir
         
@@ -488,14 +483,15 @@ class StandardPipeline(LinearVideoPipeline):
             if not input_with_title.get("title"):
                 input_with_title["title"] = storyboard.title
             
+            existing_meta = await self.core.persistence.load_task_metadata(task_id) or {}
             metadata = {
+                **existing_meta,
                 "task_id": task_id,
-                "created_at": storyboard.created_at.isoformat() if storyboard.created_at else None,
+                "project_id": ctx.params.get("project_id") or existing_meta.get("project_id"),
+                "created_at": existing_meta.get("created_at") or (storyboard.created_at.isoformat() if storyboard.created_at else None),
                 "completed_at": storyboard.completed_at.isoformat() if storyboard.completed_at else None,
                 "status": "completed",
-                
                 "input": input_with_title,
-                
                 "result": {
                     "video_path": result.video_path,
                     "duration": result.duration,

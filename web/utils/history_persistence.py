@@ -50,17 +50,18 @@ async def save_web_generation_history(
     input_params: dict,
     title: str | None = None,
     n_frames: int = 1,
+    project_id: str | None = None,
 ) -> None:
-    """Save a minimal history record for workflows implemented directly in Web UI."""
+    """Save a task record for workflows implemented directly in Web UI."""
     if not getattr(trendlume, "persistence", None):
-        logger.warning("Trendlume persistence service is not initialized; skipping history save")
+        logger.warning("Trendlume persistence service is not initialized; skipping save")
         return
 
     path = Path(video_path)
     if not task_id:
         task_id = path.parent.name
     if not path.exists():
-        logger.warning(f"Cannot save history; video file does not exist: {video_path}")
+        logger.warning(f"Cannot save task; video file does not exist: {video_path}")
         return
 
     created_at = datetime.fromtimestamp(path.parent.stat().st_ctime).isoformat()
@@ -75,6 +76,7 @@ async def save_web_generation_history(
 
     metadata = {
         "task_id": task_id,
+        "project_id": project_id,
         "created_at": created_at,
         "completed_at": completed_at,
         "status": "completed",

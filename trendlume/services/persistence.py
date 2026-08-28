@@ -17,12 +17,18 @@ Handles task metadata and storyboard persistence to filesystem.
 """
 
 import json
-from pathlib import Path
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from loguru import logger
 
-from trendlume.models.storyboard import Storyboard, StoryboardFrame, StoryboardConfig, ContentMetadata
+from trendlume.models.storyboard import (
+    ContentMetadata,
+    Storyboard,
+    StoryboardConfig,
+    StoryboardFrame,
+)
 
 
 class PersistenceService:
@@ -82,6 +88,18 @@ class PersistenceService:
     def get_storyboard_path(self, task_id: str) -> Path:
         """Get storyboard.json path"""
         return self.get_task_dir(task_id) / "storyboard.json"
+
+    def get_task_final_video_path(self, task_id: str) -> Path:
+        """Get final.mp4 path for a task"""
+        return self.get_task_dir(task_id) / "final.mp4"
+    
+    def get_project_dir(self, project_id: str) -> Path:
+        """Get project directory path"""
+        return self.output_dir / "projects" / project_id
+
+    def get_project_json_path(self, project_id: str) -> Path:
+        """Get project.json path"""
+        return self.get_project_dir(project_id) / "project.json"
     
     # ========================================================================
     # Metadata Operations
@@ -262,6 +280,7 @@ class PersistenceService:
     async def list_tasks(
         self,
         status: Optional[str] = None,
+        project_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
@@ -270,6 +289,7 @@ class PersistenceService:
         
         Args:
             status: Filter by status (pending, running, completed, failed, cancelled)
+            project_id: Filter by project_id (optional)
             limit: Maximum number of tasks to return
             offset: Number of tasks to skip
             
@@ -284,8 +304,12 @@ class PersistenceService:
             if status:
                 tasks = [t for t in tasks if t.get("status") == status]
 
+            # Filter by project_id
+            if project_id is not None:
+                tasks = [t for t in tasks if t.get("project_id") == project_id]
+
             # Sort by created_at descending
-            tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+            tasks.sort(key=lambda t: t.get("created_at") or "", reverse=True)
 
             # Apply pagination
             return tasks[offset:offset + limit]
@@ -455,38 +479,48 @@ class PersistenceService:
         except Exception as e:
             logger.error(f"Failed to save index: {e}")
     
-    async def _update_index_for_task(self, task_id: str, metadata: Dict[str, Any]):
-        """Update index entry for a specific task"""
-        index = self._load_index()
-        
-        # Try to get title from multiple sources
-        title = metadata.get("input", {}).get("title")
+    async def _resolve_task_title(self, task_id: str, metadata: Dict[str, Any]) -> str:
+        """Resolve display title from metadata, storyboard, or input text."""
+        title = metadata.get("title")
+        inp = metadata.get("input") or {}
+        if not title:
+            title = inp.get("title")
         if not title or title == "":
-            # Try to get title from storyboard if input title is empty
             storyboard = await self.load_storyboard(task_id)
             if storyboard and storyboard.title:
                 title = storyboard.title
             else:
-                # Fall back to using input text preview
-                input_text = metadata.get("input", {}).get("text", "")
+                input_text = inp.get("text", "")
                 if input_text:
-                    # Use first 30 characters of input text as title
                     title = input_text[:30] + ("..." if len(input_text) > 30 else "")
                 else:
                     title = "Untitled"
-        
-        # Extract key info for index
-        index_entry = {
+        return title
+
+    def _build_index_entry(self, task_id: str, metadata: Dict[str, Any], title: str) -> Dict[str, Any]:
+        """Build a standardised index entry dict from task metadata."""
+        res = metadata.get("result") or {}
+        return {
             "task_id": task_id,
+            "project_id": metadata.get("project_id"),
             "created_at": metadata.get("created_at"),
             "completed_at": metadata.get("completed_at"),
+            "scheduled_at": metadata.get("scheduled_at"),
+            "priority": metadata.get("priority", 0),
             "status": metadata.get("status", "unknown"),
             "title": title,
-            "duration": metadata.get("result", {}).get("duration", 0),
-            "n_frames": metadata.get("result", {}).get("n_frames", 0),
-            "file_size": metadata.get("result", {}).get("file_size", 0),
-            "video_path": metadata.get("result", {}).get("video_path"),
+            "duration": res.get("duration", 0),
+            "n_frames": res.get("n_frames", 0),
+            "file_size": res.get("file_size", 0),
+            "video_path": res.get("video_path"),
         }
+
+    async def _update_index_for_task(self, task_id: str, metadata: Dict[str, Any]):
+        """Update index entry for a specific task"""
+        index = self._load_index()
+        
+        title = await self._resolve_task_title(task_id, metadata)
+        index_entry = self._build_index_entry(task_id, metadata, title)
         
         # Update or append
         tasks = index.get("tasks", [])
@@ -507,41 +541,15 @@ class PersistenceService:
         
         # Scan all directories
         for task_dir in self.output_dir.iterdir():
-            if not task_dir.is_dir() or task_dir.name.startswith("."):
+            if not task_dir.is_dir() or task_dir.name.startswith(".") or task_dir.name == "projects":
                 continue
             
             task_id = task_dir.name
             metadata = await self.load_task_metadata(task_id)
             
             if metadata:
-                # Try to get title from multiple sources
-                title = metadata.get("input", {}).get("title")
-                if not title or title == "":
-                    # Try to get title from storyboard if input title is empty
-                    storyboard = await self.load_storyboard(task_id)
-                    if storyboard and storyboard.title:
-                        title = storyboard.title
-                    else:
-                        # Fall back to using input text preview
-                        input_text = metadata.get("input", {}).get("text", "")
-                        if input_text:
-                            # Use first 30 characters of input text as title
-                            title = input_text[:30] + ("..." if len(input_text) > 30 else "")
-                        else:
-                            title = "Untitled"
-                
-                # Add to index
-                index["tasks"].append({
-                    "task_id": task_id,
-                    "created_at": metadata.get("created_at"),
-                    "completed_at": metadata.get("completed_at"),
-                    "status": metadata.get("status", "unknown"),
-                    "title": title,
-                    "duration": metadata.get("result", {}).get("duration", 0),
-                    "n_frames": metadata.get("result", {}).get("n_frames", 0),
-                    "file_size": metadata.get("result", {}).get("file_size", 0),
-                    "video_path": metadata.get("result", {}).get("video_path"),
-                })
+                title = await self._resolve_task_title(task_id, metadata)
+                index["tasks"].append(self._build_index_entry(task_id, metadata, title))
         
         self._save_index(index)
         logger.info(f"Index rebuilt: {len(index['tasks'])} tasks")
@@ -555,6 +563,7 @@ class PersistenceService:
         page: int = 1,
         page_size: int = 20,
         status: Optional[str] = None,
+        project_id: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc"
     ) -> Dict[str, Any]:
@@ -562,10 +571,11 @@ class PersistenceService:
         List tasks with pagination
         
         Args:
-            page: Page number (1-indexed)
-            page_size: Items per page
+            page: Page number (1-based)
+            page_size: Number of items per page
             status: Filter by status (optional)
-            sort_by: Sort field (created_at, completed_at, title, duration)
+            project_id: Filter by project_id (optional)
+            sort_by: Sort field (created_at, completed_at, scheduled_at, priority, title, duration)
             sort_order: Sort order (asc, desc)
         
         Returns:
@@ -584,15 +594,21 @@ class PersistenceService:
         if status:
             tasks = [t for t in tasks if t.get("status") == status]
         
+        # Filter by project_id
+        if project_id is not None:
+            tasks = [t for t in tasks if t.get("project_id") == project_id]
+        
         # Sort
         reverse = (sort_order == "desc")
-        if sort_by in ["created_at", "completed_at"]:
+        if sort_by in ["created_at", "completed_at", "scheduled_at"]:
             tasks.sort(
-                key=lambda t: datetime.fromisoformat(t.get(sort_by, "1970-01-01T00:00:00")),
+                key=lambda t: datetime.fromisoformat(t.get(sort_by) or "1970-01-01T00:00:00"),
                 reverse=reverse
             )
+        elif sort_by == "priority":
+            tasks.sort(key=lambda t: t.get("priority", 0), reverse=reverse)
         elif sort_by in ["title", "duration", "n_frames"]:
-            tasks.sort(key=lambda t: t.get(sort_by, ""), reverse=reverse)
+            tasks.sort(key=lambda t: str(t.get(sort_by) or ""), reverse=reverse)
         
         # Paginate
         total = len(tasks)
@@ -671,5 +687,101 @@ class PersistenceService:
             return True
         except Exception as e:
             logger.error(f"Failed to delete task {task_id}: {e}")
+            return False
+
+    # ========================================================================
+    # Project Operations
+    # ========================================================================
+
+    async def save_project(self, project_data: Dict[str, Any]) -> None:
+        """
+        Save project data to filesystem (output/projects/{project_id}/project.json)
+        
+        Args:
+            project_data: Project dictionary containing project_id, name, etc.
+        """
+        try:
+            project_id = project_data.get("project_id")
+            if not project_id:
+                raise ValueError("project_id is required to save project")
+            
+            project_dir = self.get_project_dir(project_id)
+            project_dir.mkdir(parents=True, exist_ok=True)
+            
+            project_path = self.get_project_json_path(project_id)
+            with open(project_path, "w", encoding="utf-8") as f:
+                json.dump(project_data, f, indent=2, ensure_ascii=False)
+            
+            logger.debug(f"Saved project: {project_id}")
+        except Exception as e:
+            logger.error(f"Failed to save project {project_data.get('project_id')}: {e}")
+            raise
+
+    async def load_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load project data from filesystem
+        
+        Args:
+            project_id: Project ID
+            
+        Returns:
+            Project dict or None if not found
+        """
+        try:
+            project_path = self.get_project_json_path(project_id)
+            if not project_path.exists():
+                return None
+            
+            with open(project_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load project {project_id}: {e}")
+            return None
+
+    async def list_projects(self) -> List[Dict[str, Any]]:
+        """
+        List all projects from filesystem
+        
+        Returns:
+            List of project dicts, sorted by created_at descending
+        """
+        projects_dir = self.output_dir / "projects"
+        if not projects_dir.exists():
+            return []
+        
+        projects = []
+        for p_dir in projects_dir.iterdir():
+            if not p_dir.is_dir() or p_dir.name.startswith("."):
+                continue
+            project_file = p_dir / "project.json"
+            if project_file.exists():
+                try:
+                    with open(project_file, "r", encoding="utf-8") as f:
+                        projects.append(json.load(f))
+                except Exception as e:
+                    logger.warning(f"Failed to read project at {project_file}: {e}")
+        
+        projects.sort(key=lambda p: p.get("created_at", ""), reverse=True)
+        return projects
+
+    async def delete_project(self, project_id: str) -> bool:
+        """
+        Delete project directory (output/projects/{project_id})
+        
+        Args:
+            project_id: Project ID to delete
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import shutil
+            project_dir = self.get_project_dir(project_id)
+            if project_dir.exists():
+                shutil.rmtree(project_dir)
+                logger.info(f"Deleted project directory: {project_dir}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete project {project_id}: {e}")
             return False
 

@@ -14,16 +14,15 @@
 Style configuration components for web UI (middle column)
 """
 
-import os
 import base64
+import os
 from pathlib import Path
 
 import streamlit as st
 from loguru import logger
 
-from web.i18n import tr, get_language
-from web.utils.async_helpers import run_async
-from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
+from trendlume.config import config_manager
+from web.i18n import get_language, tr
 from web.pipelines.api_workflows import (
     list_api_media_workflows,
     list_local_media_workflows,
@@ -32,7 +31,8 @@ from web.pipelines.api_workflows import (
     workflow_source_help,
     workflow_source_label,
 )
-from trendlume.config import config_manager
+from web.utils.async_helpers import run_async
+from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
 
 
 def is_api_workflow(workflow_key: str | None) -> bool:
@@ -40,8 +40,9 @@ def is_api_workflow(workflow_key: str | None) -> bool:
     return bool(workflow_key and workflow_key.startswith("api/"))
 
 
-def render_style_config(trendlume):
+def render_style_config(trendlume, initial_values: dict = None, key_prefix: str = ""):
     """Render style configuration section (middle column)"""
+    initial = initial_values or {}
     # TTS Section (moved from left column)
     # ====================================================================
     with st.container(border=True):
@@ -58,13 +59,14 @@ def render_style_config(trendlume):
         tts_config = comfyui_config["tts"]
         
         # Inference mode selection
+        init_tts_mode = initial.get("tts_inference_mode") or tts_config.get("inference_mode", "local")
         tts_mode = st.radio(
             tr("tts.inference_mode"),
             ["local", "comfyui"],
             horizontal=True,
             format_func=lambda x: tr(f"tts.mode.{x}"),
-            index=0 if tts_config.get("inference_mode", "local") == "local" else 1,
-            key="tts_inference_mode"
+            index=0 if init_tts_mode == "local" else 1,
+            key=f"{key_prefix}tts_inference_mode"
         )
         
         # Show hint based on mode
@@ -80,10 +82,10 @@ def render_style_config(trendlume):
             # Import voice configuration
             from trendlume.tts_voices import EDGE_TTS_VOICES, get_voice_display_name
             
-            # Get saved voice from config
+            # Get saved voice from config or initial
             local_config = tts_config.get("local", {})
-            saved_voice = local_config.get("voice", "zh-CN-YunjianNeural")
-            saved_speed = local_config.get("speed", 1.0)
+            saved_voice = initial.get("tts_voice") or local_config.get("voice", "zh-CN-YunjianNeural")
+            saved_speed = float(initial.get("tts_speed") or local_config.get("speed", 1.0))
             
             # Build voice options with i18n
             voice_options = []
@@ -109,7 +111,7 @@ def render_style_config(trendlume):
                     tr("tts.voice_selector"),
                     voice_options,
                     index=default_voice_index,
-                    key="tts_local_voice"
+                    key=f"{key_prefix}tts_local_voice"
                 )
                 
                 # Get actual voice ID
@@ -125,7 +127,7 @@ def render_style_config(trendlume):
                     value=saved_speed,
                     step=0.1,
                     format="%.1fx",
-                    key="tts_local_speed"
+                    key=f"{key_prefix}tts_local_speed"
                 )
                 st.caption(tr("tts.speed_label", speed=f"{tts_speed:.1f}"))
             
@@ -146,7 +148,7 @@ def render_style_config(trendlume):
             
             # Default to saved workflow if exists
             default_tts_index = 0
-            saved_tts_workflow = tts_config.get("comfyui", {}).get("default_workflow")
+            saved_tts_workflow = initial.get("tts_workflow") or tts_config.get("comfyui", {}).get("default_workflow")
             if saved_tts_workflow and saved_tts_workflow in tts_workflow_keys:
                 default_tts_index = tts_workflow_keys.index(saved_tts_workflow)
             
@@ -155,7 +157,7 @@ def render_style_config(trendlume):
                 tts_workflow_options if tts_workflow_options else ["No TTS workflows found"],
                 index=default_tts_index,
                 label_visibility="collapsed",
-                key="tts_workflow_select"
+                key=f"{key_prefix}tts_workflow_select"
             )
             
             # Get the actual workflow key
@@ -173,7 +175,7 @@ def render_style_config(trendlume):
                 tr("tts.ref_audio"),
                 type=["mp3", "wav", "flac", "m4a", "aac", "ogg"],
                 help=tr("tts.ref_audio_help"),
-                key="ref_audio_upload"
+                key=f"{key_prefix}ref_audio_upload"
             )
             
             # Save uploaded ref_audio to temp file if provided
@@ -202,11 +204,11 @@ def render_style_config(trendlume):
                 tr("tts.preview_text"),
                 value="大家好，这是一段测试语音。",
                 placeholder=tr("tts.preview_text_placeholder"),
-                key="tts_preview_text"
+                key=f"{key_prefix}tts_preview_text"
             )
             
             # Preview button
-            if st.button(tr("tts.preview_button"), key="preview_tts", use_container_width=True):
+            if st.button(tr("tts.preview_button"), key=f"{key_prefix}preview_tts", use_container_width=True):
                 with st.spinner(tr("tts.previewing")):
                     try:
                         # Build TTS params based on mode
@@ -299,7 +301,10 @@ def render_style_config(trendlume):
         current_lang = get_language()
         
         # Import template utilities
-        from trendlume.utils.template_util import get_templates_grouped_by_size_and_type, get_template_type
+        from trendlume.utils.template_util import (
+            get_template_type,
+            get_templates_grouped_by_size_and_type,
+        )
         
         # Template type selector
         st.markdown(f"**{tr('template.type_selector')}**")
@@ -310,13 +315,24 @@ def render_style_config(trendlume):
             'video': tr('template.type.video'),
         }
         
+        # Determine default template type from initial frame_template if provided
+        default_type_index = 1  # Default to 'image'
+        if initial.get("frame_template"):
+            try:
+                inferred_type = get_template_type(initial["frame_template"])
+                type_keys = list(template_type_options.keys())
+                if inferred_type in type_keys:
+                    default_type_index = type_keys.index(inferred_type)
+            except Exception:
+                pass
+
         # Radio buttons in horizontal layout
         selected_template_type = st.radio(
             tr('template.type_selector'),
             options=list(template_type_options.keys()),
             format_func=lambda x: template_type_options[x],
-            index=1,  # Default to 'image'
-            key="template_type_selector",
+            index=default_type_index,
+            key=f"{key_prefix}template_type_selector",
             label_visibility="collapsed",
             horizontal=True
         )
@@ -359,16 +375,19 @@ def render_style_config(trendlume):
         }
         type_specific_default = type_default_templates.get(selected_template_type, config_default_template)
         
+        template_key = f"{key_prefix}selected_template"
+        last_type_key = f"{key_prefix}last_template_type"
+
         # Initialize selected template in session state if not exists
-        if 'selected_template' not in st.session_state:
-            st.session_state['selected_template'] = type_specific_default
+        if template_key not in st.session_state:
+            st.session_state[template_key] = initial.get("frame_template") or type_specific_default
         
         # Track last selected template type to detect type changes
-        last_template_type = st.session_state.get('last_template_type', None)
+        last_template_type = st.session_state.get(last_type_key, None)
         if last_template_type != selected_template_type:
             # Template type changed, reset to type-specific default
-            st.session_state['selected_template'] = type_specific_default
-            st.session_state['last_template_type'] = selected_template_type
+            st.session_state[template_key] = type_specific_default
+            st.session_state[last_type_key] = selected_template_type
         
         # Collect size groups and prepare tabs
         size_groups = []
@@ -473,23 +492,23 @@ def render_style_config(trendlume):
                                     )
                                 
                                 # Select button (unified label)
-                                is_selected = (st.session_state['selected_template'] == template.template_path)
+                                is_selected = (st.session_state[template_key] == template.template_path)
                                 button_label = f"{tr('template.selected')}" if is_selected else tr('template.select_button')
                                 button_type = "primary" if is_selected else "secondary"
                                 
                                 if st.button(
                                     button_label,
-                                    key=f"template_{template.template_path}",
+                                    key=f"{key_prefix}template_{template.template_path}",
                                     use_container_width=True,
                                     type=button_type,
                                 ):
-                                    st.session_state['selected_template'] = template.template_path
+                                    st.session_state[template_key] = template.template_path
                                     st.rerun()
             else:
                 st.warning(tr("template.no_templates_with_preview"))
             
             # Display selected template name (inside expander, below tabs)
-            frame_template = st.session_state['selected_template']
+            frame_template = st.session_state[template_key]
             
             # Find the selected template's display name
             selected_template_name = None
@@ -512,6 +531,7 @@ def render_style_config(trendlume):
         
         # Custom template parameters (for video generation)
         from trendlume.services.frame_html import HTMLFrameGenerator
+
         # Resolve template path to support both data/templates/ and templates/
         from trendlume.utils.template_util import resolve_template_path
         template_path_for_params = resolve_template_path(frame_template)
@@ -540,6 +560,7 @@ def render_style_config(trendlume):
         custom_values_for_video = {}
         if custom_params_for_video:
             st.markdown("📝 " + tr("template.custom_parameters"))
+            init_template_params = initial.get("template_params") or {}
             
             # Render custom parameter inputs in 2 columns
             video_custom_col1, video_custom_col2 = st.columns(2)
@@ -551,64 +572,64 @@ def render_style_config(trendlume):
             with video_custom_col1:
                 for param_name, config in param_items[:mid_point]:
                     param_type = config['type']
-                    default = config['default']
+                    default = init_template_params.get(param_name, config['default'])
                     label = config['label']
                     
                     if param_type == 'text':
                         custom_values_for_video[param_name] = st.text_input(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
                     elif param_type == 'number':
                         custom_values_for_video[param_name] = st.number_input(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
                     elif param_type == 'color':
                         custom_values_for_video[param_name] = st.color_picker(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
                     elif param_type == 'bool':
                         custom_values_for_video[param_name] = st.checkbox(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
             
             # Right column parameters
             with video_custom_col2:
                 for param_name, config in param_items[mid_point:]:
                     param_type = config['type']
-                    default = config['default']
+                    default = init_template_params.get(param_name, config['default'])
                     label = config['label']
                     
                     if param_type == 'text':
                         custom_values_for_video[param_name] = st.text_input(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
                     elif param_type == 'number':
                         custom_values_for_video[param_name] = st.number_input(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
                     elif param_type == 'color':
                         custom_values_for_video[param_name] = st.color_picker(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
                     elif param_type == 'bool':
                         custom_values_for_video[param_name] = st.checkbox(
                             label,
                             value=default,
-                            key=f"video_custom_{param_name}"
+                            key=f"{key_prefix}video_custom_{param_name}"
                         )
         
         # Template preview expander
@@ -619,13 +640,13 @@ def render_style_config(trendlume):
                 preview_title = st.text_input(
                     tr("template.preview_param_title"), 
                     value=tr("template.preview_default_title"),
-                    key="preview_title"
+                    key=f"{key_prefix}preview_title"
                 )
                 preview_image = st.text_input(
                     tr("template.preview_param_image"), 
                     value="resources/example.png",
                     help=tr("template.preview_image_help"),
-                    key="preview_image"
+                    key=f"{key_prefix}preview_image"
                 )
             
             with col2:
@@ -633,7 +654,7 @@ def render_style_config(trendlume):
                     tr("template.preview_param_text"), 
                     value=tr("template.preview_default_text"),
                     height=100,
-                    key="preview_text"
+                    key=f"{key_prefix}preview_text"
                 )
             
             # Info: Size is auto-determined from template
@@ -642,7 +663,7 @@ def render_style_config(trendlume):
             st.info(f"📐 {tr('template.size_info')}: {template_width} × {template_height}")
             
             # Preview button
-            if st.button(tr("template.preview_button"), key="btn_preview_template", use_container_width=True):
+            if st.button(tr("template.preview_button"), key=f"{key_prefix}btn_preview_template", use_container_width=True):
                 with st.spinner(tr("template.preview_generating")):
                     try:
                         from trendlume.services.frame_html import HTMLFrameGenerator
@@ -700,7 +721,7 @@ def render_style_config(trendlume):
         media_width = st.session_state.get('template_media_width')
         media_height = st.session_state.get('template_media_height')
         media_config_key = "video" if template_media_type == "video" else "image"
-        saved_workflow = comfyui_config.get(media_config_key, {}).get("default_workflow") or ""
+        saved_workflow = initial.get("media_workflow") or comfyui_config.get(media_config_key, {}).get("default_workflow") or ""
         workflow_key = None
 
         with st.container(border=True):
@@ -726,7 +747,7 @@ def render_style_config(trendlume):
                 if saved_workflow.startswith(f"{source}/"):
                     default_source_index = index
                     break
-            source_key = "standard_video_workflow_source" if template_media_type == "video" else "standard_image_workflow_source"
+            source_key = f"{key_prefix}standard_video_workflow_source" if template_media_type == "video" else f"{key_prefix}standard_image_workflow_source"
             workflow_source = st.radio(
                 "生成来源" if get_language() == "zh_CN" else "Generation source",
                 source_options,
@@ -819,7 +840,7 @@ def render_style_config(trendlume):
             if template_media_type == "video" and is_api_workflow(workflow_key):
                 api_video_params = render_api_video_controls(
                     workflow_info,
-                    key_prefix="standard_video",
+                    key_prefix=f"{key_prefix}standard_video",
                     default_duration=5,
                     allow_audio_driven=False,
                     show_duration=False,
@@ -842,28 +863,52 @@ def render_style_config(trendlume):
                 k: f"{_STYLE_EMOJI.get(k, '🎨')} {v['name']}"
                 for k, v in IMAGE_STYLE_PRESETS.items()
             })
+            preset_key = f"{key_prefix}style_preset_selector"
+            input_key = f"{key_prefix}prompt_prefix_input"
+            active_preset_key = f"{key_prefix}_active_style_preset"
+
+            init_preset = initial.get("style_preset", "custom")
+            if not init_preset or init_preset not in style_options:
+                init_preset = "custom"
+            preset_idx = style_options.index(init_preset)
+
             selected_style_preset = st.selectbox(
                 "视觉美学风格预设 (可选)",
                 options=style_options,
                 format_func=lambda x: style_labels.get(x, x),
-                index=0,
-                key="style_preset_selector",
+                index=preset_idx,
+                key=preset_key,
                 help="快速选用经过精心调优的专业视觉美学提示词模板"
             )
-            
-            if selected_style_preset != "custom" and selected_style_preset in IMAGE_STYLE_PRESETS:
-                prefix_default_val = IMAGE_STYLE_PRESETS[selected_style_preset]["description"]
-            else:
-                prefix_default_val = current_prefix
-        
-            # Prompt prefix input (temporary, not saved to config)
+
+            # Detect if user changed preset in selectbox
+            prev_preset = st.session_state.get(active_preset_key)
+            if prev_preset is not None and selected_style_preset != prev_preset:
+                # User changed preset! Update prompt prefix input accordingly
+                if selected_style_preset in IMAGE_STYLE_PRESETS:
+                    st.session_state[input_key] = IMAGE_STYLE_PRESETS[selected_style_preset]["description"]
+                st.session_state[active_preset_key] = selected_style_preset
+            elif prev_preset is None:
+                # First run initialization
+                st.session_state[active_preset_key] = selected_style_preset
+                if input_key not in st.session_state:
+                    if initial.get("prompt_prefix") is not None and initial["prompt_prefix"].strip() != "":
+                        st.session_state[input_key] = initial["prompt_prefix"]
+                    elif selected_style_preset != "custom" and selected_style_preset in IMAGE_STYLE_PRESETS:
+                        st.session_state[input_key] = IMAGE_STYLE_PRESETS[selected_style_preset]["description"]
+                    elif initial.get("prompt_prefix") is not None:
+                        st.session_state[input_key] = initial["prompt_prefix"]
+                    else:
+                        st.session_state[input_key] = current_prefix
+
+            # Prompt prefix input
             prompt_prefix = st.text_area(
                 tr('style.prompt_prefix'),
-                value=prefix_default_val,
+                key=input_key,
                 placeholder=tr("style.prompt_prefix_placeholder"),
                 height=80,
                 label_visibility="visible",
-                help=tr("style.prompt_prefix_help")
+                help=tr("style.prompt_prefix_help"),
             )
         
             # Media preview expander
@@ -877,12 +922,12 @@ def render_style_config(trendlume):
                     test_prompt_label,
                     value=test_prompt_value,
                     help=tr("style.test_prompt_help"),
-                    key="style_test_prompt"
+                    key=f"{key_prefix}style_test_prompt"
                 )
             
                 # Preview button
                 preview_button_label = tr("style.video_preview") if template_media_type == "video" else tr("style.preview")
-                if st.button(preview_button_label, key="preview_style", use_container_width=True):
+                if st.button(preview_button_label, key=f"{key_prefix}preview_style", use_container_width=True):
                     if not workflow_key:
                         st.error(
                             "请先选择可用的工作流或模型。"

@@ -20,8 +20,9 @@ from web.i18n import tr
 from web.utils.async_helpers import get_project_version
 
 
-def render_content_input():
+def render_content_input(initial_values: dict = None, key_prefix: str = ""):
     """Render content input section (left column) with batch support"""
+    initial = initial_values or {}
     with st.container(border=True):
         st.markdown(f"**{tr('section.content_input')}**")
         
@@ -30,8 +31,9 @@ def render_content_input():
         # ====================================================================
         batch_mode = st.checkbox(
             tr("batch.mode_label"),
-            value=False,
-            help=tr("batch.mode_help")
+            value=initial.get("batch_mode", False),
+            help=tr("batch.mode_help"),
+            key=f"{key_prefix}batch_mode",
         )
         
         if not batch_mode:
@@ -39,12 +41,15 @@ def render_content_input():
             # Single task mode (original logic, unchanged)
             # ================================================================
             # Processing mode selection
+            initial_mode = initial.get("mode", "generate")
             mode = st.radio(
                 "Processing Mode",
                 ["generate", "fixed"],
                 horizontal=True,
+                index=0 if initial_mode == "generate" else 1,
                 format_func=lambda x: tr(f"mode.{x}"),
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key=f"{key_prefix}processing_mode",
             )
             
             # Text input (unified for both modes)
@@ -54,9 +59,11 @@ def render_content_input():
             
             text = st.text_area(
                 tr("input.text"),
+                value=initial.get("text", ""),
                 placeholder=text_placeholder,
                 height=text_height,
-                help=text_help
+                help=text_help,
+                key=f"{key_prefix}input_text",
             )
             
             # Split mode selector (only show in fixed mode)
@@ -66,12 +73,16 @@ def render_content_input():
                     "line": tr("split.mode_line"),
                     "sentence": tr("split.mode_sentence"),
                 }
+                init_split = initial.get("split_mode", "paragraph")
+                split_keys = list(split_mode_options.keys())
+                split_idx = split_keys.index(init_split) if init_split in split_keys else 0
                 split_mode = st.selectbox(
                     tr("split.mode_label"),
-                    options=list(split_mode_options.keys()),
+                    options=split_keys,
                     format_func=lambda x: split_mode_options[x],
-                    index=0,  # Default to paragraph mode
-                    help=tr("split.mode_help")
+                    index=split_idx,
+                    help=tr("split.mode_help"),
+                    key=f"{key_prefix}input_split_mode",
                 )
             else:
                 split_mode = "paragraph"  # Default for generate mode (not used)
@@ -79,19 +90,24 @@ def render_content_input():
             # Title input (optional for both modes)
             title = st.text_input(
                 tr("input.title"),
+                value=initial.get("title", ""),
                 placeholder=tr("input.title_placeholder"),
-                help=tr("input.title_help")
+                help=tr("input.title_help"),
+                key=f"{key_prefix}input_title",
             )
             
             # Number of scenes (only show in generate mode)
             if mode == "generate":
+                init_scenes = int(initial.get("n_scenes", 5))
+                init_scenes = max(3, min(30, init_scenes))
                 n_scenes = st.slider(
                     tr("video.frames"),
                     min_value=3,
                     max_value=30,
-                    value=5,
+                    value=init_scenes,
                     help=tr("video.frames_help"),
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    key=f"{key_prefix}input_n_scenes",
                 )
                 st.caption(tr("video.frames_label", n=n_scenes))
             else:
@@ -106,9 +122,9 @@ def render_content_input():
                 "title": title,
                 "n_scenes": n_scenes,
                 "split_mode": split_mode,
-                "genre": "auto",
-                "hook_type": None,
-                "custom_prompt": "",
+                "genre": initial.get("genre", "auto"),
+                "hook_type": initial.get("hook_type", None),
+                "custom_prompt": initial.get("custom_prompt", ""),
             }
 
 
@@ -194,8 +210,9 @@ def render_content_input():
             }
 
 
-def render_bgm_section(key_prefix=""):
+def render_bgm_section(key_prefix="", initial_values: dict = None):
     """Render BGM selection section"""
+    initial = initial_values or {}
     with st.container(border=True):
         st.markdown(f"**{tr('section.bgm')}**")
         
@@ -220,9 +237,12 @@ def render_bgm_section(key_prefix=""):
         # Add special "None" option
         bgm_options = [tr("bgm.none")] + bgm_files
         
-        # Default to "default.mp3" if exists, otherwise first option
+        # Default to configured initial value or "default.mp3" if exists, otherwise first option
+        init_bgm = initial.get("bgm_path")
         default_index = 0
-        if "default.mp3" in bgm_files:
+        if init_bgm and init_bgm in bgm_options:
+            default_index = bgm_options.index(init_bgm)
+        elif init_bgm is None and "default.mp3" in bgm_files:
             default_index = bgm_options.index("default.mp3")
         
         bgm_choice = st.selectbox(
@@ -235,11 +255,13 @@ def render_bgm_section(key_prefix=""):
         
         # BGM volume slider (only show when BGM is selected)
         if bgm_choice != tr("bgm.none"):
+            init_vol = float(initial.get("bgm_volume", 0.2))
+            init_vol = max(0.0, min(0.5, init_vol))
             bgm_volume = st.slider(
                 tr("bgm.volume"),
                 min_value=0.0,
                 max_value=0.5,
-                value=0.2,
+                value=init_vol,
                 step=0.01,
                 format="%.2f",
                 key=f"{key_prefix}bgm_volume_slider",

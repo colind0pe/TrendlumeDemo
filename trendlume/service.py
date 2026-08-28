@@ -20,25 +20,28 @@ import hashlib
 import json
 from typing import Optional
 
-from loguru import logger
 from comfykit import ComfyKit
+from loguru import logger
 
 from trendlume.config import config_manager
-from trendlume.services.llm_service import LLMService
-from trendlume.services.tts_service import TTSService
-from trendlume.services.media import MediaService
-from trendlume.services.api_media import APIProviderMediaService
-from trendlume.services.image_analysis import ImageAnalysisService
-from trendlume.services.video_analysis import VideoAnalysisService
-from trendlume.services.api_asset_analysis import APIAssetAnalysisService
-from trendlume.services.video import VideoService
-from trendlume.services.frame_processor import FrameProcessor
-from trendlume.services.persistence import PersistenceService
-from trendlume.services.history_manager import HistoryManager
-from trendlume.research.service import ResearchService
-from trendlume.pipelines.standard import StandardPipeline
-from trendlume.pipelines.custom import CustomPipeline
 from trendlume.pipelines.asset_based import AssetBasedPipeline
+from trendlume.pipelines.custom import CustomPipeline
+from trendlume.pipelines.standard import StandardPipeline
+from trendlume.research.service import ResearchService
+from trendlume.services.api_asset_analysis import APIAssetAnalysisService
+from trendlume.services.api_media import APIProviderMediaService
+from trendlume.services.frame_processor import FrameProcessor
+from trendlume.services.history_manager import HistoryManager
+from trendlume.services.image_analysis import ImageAnalysisService
+from trendlume.services.llm_service import LLMService
+from trendlume.services.media import MediaService
+from trendlume.services.persistence import PersistenceService
+from trendlume.services.project_manager import ProjectManager
+from trendlume.services.task_manager import TaskManager
+from trendlume.services.task_scheduler import TaskScheduler
+from trendlume.services.tts_service import TTSService
+from trendlume.services.video import VideoService
+from trendlume.services.video_analysis import VideoAnalysisService
 
 
 class TrendlumeCore:
@@ -97,7 +100,10 @@ class TrendlumeCore:
         self.video: Optional[VideoService] = None
         self.frame_processor: Optional[FrameProcessor] = None
         self.persistence: Optional[PersistenceService] = None
+        self.tasks: Optional[TaskManager] = None
         self.history: Optional[HistoryManager] = None
+        self.projects: Optional[ProjectManager] = None
+        self.scheduler: Optional[TaskScheduler] = None
         self.research: Optional[ResearchService] = None
         
         # Video generation pipelines (dictionary of pipeline_name -> pipeline_instance)
@@ -212,7 +218,10 @@ class TrendlumeCore:
         self.video = VideoService()
         self.frame_processor = FrameProcessor(self)
         self.persistence = PersistenceService(output_dir="output")
+        self.tasks = TaskManager(self.persistence)
         self.history = HistoryManager(self.persistence)
+        self.projects = ProjectManager(self.persistence, core=self)
+        self.scheduler = TaskScheduler(self.persistence, self.projects, core=self)
         
         # 2. Register video generation pipelines
         self.pipelines = {
@@ -225,6 +234,10 @@ class TrendlumeCore:
         # 3. Set default pipeline callable (for backward compatibility)
         self.generate_video = self._create_generate_video_wrapper()
         
+        # 4. Start background scheduler
+        if self.scheduler:
+            self.scheduler.start_polling(interval_seconds=15)
+            
         self._initialized = True
         logger.info("✅ Trendlume initialized successfully\n")
     
@@ -235,6 +248,13 @@ class TrendlumeCore:
         Example:
             await trendlume.cleanup()
         """
+        if self.scheduler:
+            try:
+                self.scheduler.stop_polling()
+            except Exception as e:
+                logger.warning(f"Failed to stop TaskScheduler: {e}")
+            self.scheduler = None
+
         if self.research:
             try:
                 await self.research.close()
@@ -314,6 +334,17 @@ class TrendlumeCore:
     def project_name(self) -> str:
         """Get project name from config"""
         return self.config.get("project_name", "Trendlume")
+
+    async def migrate_history(self):
+        """
+        Migrate legacy history tasks into the Project system ('Imported History').
+        
+        Returns:
+            MigrationResult
+        """
+        if not self._initialized:
+            await self.initialize()
+        return await self.projects.migrate_legacy_tasks()
     
     def __repr__(self) -> str:
         """String representation"""
