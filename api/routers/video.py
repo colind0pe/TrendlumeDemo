@@ -155,6 +155,10 @@ async def generate_video_sync(
         if request_body.template_params:
             video_params["template_params"] = request_body.template_params
         
+        # Add publishing config if specified
+        if request_body.publishing:
+            video_params["publishing"] = request_body.publishing
+        
         # Call video generator service
         result = await trendlume.generate_video(**video_params)
         
@@ -259,6 +263,10 @@ async def generate_video_async(
             # Add custom template parameters if specified
             if request_body.template_params:
                 video_params["template_params"] = request_body.template_params
+            
+            # Add publishing config if specified
+            if request_body.publishing:
+                video_params["publishing"] = request_body.publishing
             
             result = await trendlume.generate_video(**video_params)
             

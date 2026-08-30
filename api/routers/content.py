@@ -48,7 +48,8 @@ async def generate_narration(
     """
     Generate narrations from text
     
-    Uses LLM to break down text into multiple narration segments with golden hooks and multi-genre support.
+    Uses LLM to break down text into multiple narration segments with golden hooks, multi-genre support,
+    video title, and unified publishing platform metadata.
     
     - **text**: Source text
     - **n_scenes**: Number of narrations to generate
@@ -57,13 +58,15 @@ async def generate_narration(
     - **genre**: Track/genre style
     - **hook_type**: Golden hook strategy
     - **custom_prompt**: Additional user guidance
+    - **title**: Optional user-specified title
+    - **target_platform**: Target platform (default: 'douyin')
     
-    Returns list of narration strings.
+    Returns list of narration strings, video title, and publishing metadata.
     """
     try:
-        logger.info(f"Generating {request.n_scenes} narrations from text (genre={request.genre}, hook={request.hook_type})")
+        logger.info(f"Generating {request.n_scenes} narrations from text (genre={request.genre}, hook={request.hook_type}, platform={request.target_platform})")
         
-        narrations = await generate_narrations_from_topic(
+        bundle = await generate_narrations_from_topic(
             llm_service=trendlume.llm,
             topic=request.text,
             n_scenes=request.n_scenes,
@@ -74,9 +77,16 @@ async def generate_narration(
             custom_prompt=request.custom_prompt,
             research_service=getattr(trendlume, "research", None),
             enable_research=request.enable_research,
+            title=request.title,
+            target_platform=request.target_platform or "douyin",
+            return_full=True,
         )
         
-        return NarrationGenerateResponse(narrations=narrations)
+        return NarrationGenerateResponse(
+            narrations=bundle.narrations,
+            title=bundle.title or None,
+            metadata=bundle.metadata,
+        )
         
     except Exception as e:
         logger.error(f"Narration generation error: {e}")

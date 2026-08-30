@@ -37,6 +37,7 @@ from trendlume.services.llm_service import LLMService
 from trendlume.services.media import MediaService
 from trendlume.services.persistence import PersistenceService
 from trendlume.services.project_manager import ProjectManager
+from trendlume.services.publishing_service import PublishingService
 from trendlume.services.task_manager import TaskManager
 from trendlume.services.task_scheduler import TaskScheduler
 from trendlume.services.tts_service import TTSService
@@ -103,6 +104,7 @@ class TrendlumeCore:
         self.tasks: Optional[TaskManager] = None
         self.history: Optional[HistoryManager] = None
         self.projects: Optional[ProjectManager] = None
+        self.publishing: Optional[PublishingService] = None
         self.scheduler: Optional[TaskScheduler] = None
         self.research: Optional[ResearchService] = None
         
@@ -221,6 +223,7 @@ class TrendlumeCore:
         self.tasks = TaskManager(self.persistence)
         self.history = HistoryManager(self.persistence)
         self.projects = ProjectManager(self.persistence, core=self)
+        self.publishing = PublishingService(self.persistence, core=self, llm_service=self.llm)
         self.scheduler = TaskScheduler(self.persistence, self.projects, core=self)
         
         # 2. Register video generation pipelines
@@ -234,9 +237,11 @@ class TrendlumeCore:
         # 3. Set default pipeline callable (for backward compatibility)
         self.generate_video = self._create_generate_video_wrapper()
         
-        # 4. Start background scheduler
+        # 4. Start background scheduler & publishing worker
         if self.scheduler:
             self.scheduler.start_polling(interval_seconds=15)
+        if self.publishing:
+            self.publishing.start_worker()
             
         self._initialized = True
         logger.info("✅ Trendlume initialized successfully\n")
@@ -254,6 +259,12 @@ class TrendlumeCore:
             except Exception as e:
                 logger.warning(f"Failed to stop TaskScheduler: {e}")
             self.scheduler = None
+
+        if self.publishing:
+            try:
+                self.publishing.stop_worker()
+            except Exception as e:
+                logger.warning(f"Failed to stop PublishingWorker: {e}")
 
         if self.research:
             try:

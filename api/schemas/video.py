@@ -83,6 +83,12 @@ class VideoGenerateRequest(BaseModel):
     bgm_path: Optional[str] = Field(None, description="Background music path")
     bgm_volume: float = Field(0.3, ge=0.0, le=1.0, description="BGM volume (0.0-1.0)")
     
+    # === Publishing ===
+    publishing: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Automated publishing configuration (mode, platform, account_ids, scheduled_at)",
+    )
+    
     class Config:
         json_schema_extra = {
             "example": {

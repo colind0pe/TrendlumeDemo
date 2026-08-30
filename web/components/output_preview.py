@@ -218,8 +218,14 @@ def render_single_output(trendlume, video_params):
                             data=video_bytes,
                             file_name=video_filename,
                             mime="video/mp4",
-                            use_container_width=True
+                            use_container_width=True,
                         )
+
+                    # Render Platform Metadata & Publishing Status Section
+                    task_id = result.storyboard.config.task_id
+                    if task_id:
+                        from web.components.task_publishing import render_task_publishing_section
+                        render_task_publishing_section(trendlume, task_id, key_prefix="studio_out_")
                 else:
                     st.warning(tr("status.video_not_found", path=result.video_path))
                     

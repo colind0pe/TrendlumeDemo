@@ -147,3 +147,20 @@ class Task(BaseModel):
         if self.metadata:
             data["metadata"] = self.metadata
         return data
+
+    @property
+    def video_path(self) -> Optional[str]:
+        """Convenience property to access output video path"""
+        if self.result and isinstance(self.result, dict):
+            vp = self.result.get("video_path")
+            if vp:
+                return vp
+        return self.metadata.get("video_path")
+
+    @property
+    def narration_text(self) -> Optional[str]:
+        """Convenience property to access narration text or prompt"""
+        if self.input and isinstance(self.input, dict):
+            return self.input.get("narration_text") or self.input.get("prompt") or self.input.get("text")
+        return self.metadata.get("narration_text")
+

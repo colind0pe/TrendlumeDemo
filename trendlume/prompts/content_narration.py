@@ -22,19 +22,23 @@ from typing import Optional
 
 CONTENT_NARRATION_TEMPLATE = """# Mandatory Language Rule (CRITICAL & HIGHEST PRIORITY)
 First, identify the exact language of the source content.
-You MUST write and output ALL {n_storyboard} storyboard narrations in the EXACT SAME LANGUAGE as the source content.
-- If the source content is in Chinese (中文), you MUST output all narrations in 100% fluent, natural Chinese (严禁输出英文).
-- If the source content is in English, you MUST output all narrations in English.
+You MUST write and output ALL {n_storyboard} storyboard narrations, video title, and publishing metadata in the EXACT SAME LANGUAGE as the source content.
+- If the source content is in Chinese (中文), you MUST output all narrations, title, and metadata in 100% fluent, natural Chinese (严禁输出英文).
+- If the source content is in English, you MUST output all content in English.
 
 # Role Definition
 You are a master short-video script editor. You excel at extracting core insights from source text and restructuring them into punchy, spoken-style short video scripts with high viewer retention and coherent narrative flow.
 
 # Core Task
-The user will provide source content. Distill and restructure it into {n_storyboard} scene-by-scene narrations for TTS voiceover generation.
+The user will provide source content. Distill and restructure it into a complete, consistent video package:
+1. **Video Title (title)**: Catchy, suspenseful, and curiosity-inducing video title (strictly <= 30 characters, no punctuation at the end).
+2. **Storyboard Narrations (narrations)**: {n_storyboard} scene-by-scene narrations for TTS voiceover generation.
+3. **Platform Publishing Metadata (metadata)**: High-converting publishing metadata (engaging post description, 3-8 hashtags, declaration) tailored for {target_platform} publishing.
 
 # Source Content
 {content}
 
+{title_section}
 {genre_section}
 {custom_prompt_section}
 
@@ -54,22 +58,33 @@ The user will provide source content. Distill and restructure it into {n_storybo
 - **Tone & Delivery**: Accessible, sincere, crisp, and conversational. Reject academic jargon and bureaucratic phrasing.
 - **Prohibitions**: No markdown headers, no scene labels in narration text, no URLs, no emoji in voiceover, no numbering.
 
+# Platform Publishing Metadata Requirements ({target_platform})
+- **description**: Engaging caption summarizing core takeaway + ending with an interactive question or call to like/comment (1-3 punchy sentences).
+- **tags**: Array of 3-8 high-traffic, relevant topic tags without '#' symbol.
+- **declaration**: Appropriate declaration (e.g. "个人观点，仅供参考").
+
 # Output Format
 Strictly output in the following JSON format, without any surrounding commentary:
 
 ```json
 {{
+  "title": "Viral Video Title (<=30 chars)",
   "narrations": [
     "First narration (Scene 1: 3-Second Golden Hook)",
     "Second narration (Scene 2: Core Context & Problem)",
     "Third narration (Scene 3: Deep Insight & Key Point)",
     "Fourth narration (Scene 4: Elaboration & Impact)",
     "Fifth narration (Scene 5: Summary + Natural Follow CTA in the last 1-2 sentences)"
-  ]
+  ],
+  "metadata": {{
+    "description": "Engaging post caption summarizing the video and prompting comment/interaction.",
+    "tags": ["TopicTag1", "TopicTag2", "TopicTag3"],
+    "declaration": "内容为个人观点或见解"
+  }}
 }}
 ```
 
-**CRITICAL**: Return ONLY the valid JSON object containing exactly {n_storyboard} string elements in the "narrations" array.
+**CRITICAL**: Return ONLY the valid JSON object containing "title", "narrations" (exactly {n_storyboard} string elements), and "metadata".
 """
 
 
@@ -81,6 +96,8 @@ def build_content_narration_prompt(
     max_words: int = 20,
     genre: str = "general",
     custom_prompt: str = "",
+    title: Optional[str] = None,
+    target_platform: str = "douyin",
 ) -> str:
     """
     Build content refinement narration prompt
@@ -92,6 +109,8 @@ def build_content_narration_prompt(
         max_words: Maximum word count per narration
         genre: Genre style hint (default: 'general')
         custom_prompt: Additional user guidance or specific requirements
+        title: Optional user-specified video title
+        target_platform: Target publishing platform (default: 'douyin')
     
     Returns:
         Formatted prompt
@@ -101,6 +120,12 @@ def build_content_narration_prompt(
         from trendlume.prompts.topic_narration import GENRE_INSTRUCTIONS
         if genre in GENRE_INSTRUCTIONS:
             genre_section = f"# Track / Genre Style Guide ({genre})\n{GENRE_INSTRUCTIONS[genre]}\n"
+
+    # User title section if provided
+    if title and title.strip():
+        title_section = f"# User Specified Title (Must align content with this title)\nTitle: {title.strip()}\n"
+    else:
+        title_section = ""
 
     if custom_prompt and custom_prompt.strip():
         custom_prompt_section = f"# Additional User Requirements\n{custom_prompt.strip()}\n"
@@ -114,6 +139,8 @@ def build_content_narration_prompt(
         max_words=max_words,
         genre_section=genre_section,
         custom_prompt_section=custom_prompt_section,
+        title_section=title_section,
+        target_platform=target_platform,
     ).strip()
 
 

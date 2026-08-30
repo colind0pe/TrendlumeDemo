@@ -54,6 +54,10 @@ class PipelineContext:
     # === Visuals ===
     image_prompts: List[Optional[str]] = field(default_factory=list)
     
+    # === Platform Metadata & Publishing ===
+    platform_metadata: Optional[Dict[str, Any]] = None
+    publishing_config: Optional[Dict[str, Any]] = None
+    
     # === Configuration & Storyboard ===
     config: Optional[StoryboardConfig] = None
     storyboard: Optional[Storyboard] = None
@@ -71,11 +75,12 @@ class LinearVideoPipeline(BasePipeline):
     1. setup_environment
     2. generate_content
     3. determine_title
-    4. plan_visuals
-    5. initialize_storyboard
-    6. produce_assets
-    7. post_production
-    8. finalize
+    4. generate_metadata
+    5. plan_visuals
+    6. initialize_storyboard
+    7. produce_assets
+    8. post_production
+    9. finalize
     
     Subclasses should override specific steps to customize behavior while maintaining
     the overall workflow structure.
@@ -104,6 +109,7 @@ class LinearVideoPipeline(BasePipeline):
             # === Phase 2: Content Creation ===
             await self.generate_content(ctx)
             await self.determine_title(ctx)
+            await self.generate_metadata(ctx)
             
             # === Phase 3: Visual Planning ===
             await self.plan_visuals(ctx)
@@ -135,9 +141,13 @@ class LinearVideoPipeline(BasePipeline):
     async def determine_title(self, ctx: PipelineContext):
         """Step 3: Determine or generate video title."""
         pass
+
+    async def generate_metadata(self, ctx: PipelineContext):
+        """Step 4: Generate target platform metadata based on script and title."""
+        pass
         
     async def plan_visuals(self, ctx: PipelineContext):
-        """Step 4: Generate image prompts or visual descriptions."""
+        """Step 5: Generate image prompts or visual descriptions."""
         pass
         
     async def initialize_storyboard(self, ctx: PipelineContext):

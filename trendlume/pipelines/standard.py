@@ -97,16 +97,22 @@ class StandardPipeline(LinearVideoPipeline):
             logger.info(f"   Will copy final video to: {output_path}")
 
     async def generate_content(self, ctx: PipelineContext):
-        """Step 2: Generate or process script/narrations."""
+        """Step 2: Generate or process script/narrations, title, and publishing metadata."""
         mode = ctx.params.get("mode", "generate")
         text = ctx.input_text
         n_scenes = ctx.params.get("n_scenes", 5)
         min_words = ctx.params.get("min_narration_words", 5)
         max_words = ctx.params.get("max_narration_words", 20)
         
+        pub_cfg = ctx.params.get("publishing") or ctx.params.get("publishing_config") or {}
+        if isinstance(pub_cfg, dict):
+            target_platform = pub_cfg.get("platform") or ctx.params.get("platform") or "douyin"
+        else:
+            target_platform = getattr(pub_cfg, "platform", "douyin")
+        
         if mode == "generate":
             self._report_progress(ctx.progress_callback, "generating_narrations", 0.05)
-            ctx.narrations = await generate_narrations_from_topic(
+            content_bundle = await generate_narrations_from_topic(
                 self.llm,
                 topic=text,
                 n_scenes=n_scenes,
@@ -117,8 +123,27 @@ class StandardPipeline(LinearVideoPipeline):
                 custom_prompt=ctx.params.get("custom_prompt", ""),
                 research_service=getattr(self.core, "research", None),
                 enable_research=ctx.params.get("enable_research"),
+                title=ctx.params.get("title"),
+                target_platform=target_platform,
+                return_full=True,
             )
-            logger.info(f"✅ Generated {len(ctx.narrations)} narrations")
+            ctx.narrations = content_bundle.narrations
+            if not ctx.title and content_bundle.title:
+                ctx.title = content_bundle.title
+            
+            if content_bundle.metadata:
+                if hasattr(self.core, "publishing") and self.core.publishing:
+                    norm_meta = self.core.publishing.metadata_generator.normalize_metadata(
+                        platform=target_platform,
+                        metadata_dict=content_bundle.metadata,
+                        fallback_title=ctx.title or text[:20],
+                        fallback_script="\n".join(ctx.narrations),
+                    )
+                    ctx.platform_metadata = {target_platform: norm_meta.model_dump()}
+                else:
+                    ctx.platform_metadata = {target_platform: content_bundle.metadata}
+            
+            logger.info(f"✅ Generated {len(ctx.narrations)} narrations with unified title and metadata")
         else:  # fixed
             self._report_progress(ctx.progress_callback, "splitting_script", 0.05)
             split_mode = ctx.params.get("split_mode", "paragraph")
@@ -128,18 +153,13 @@ class StandardPipeline(LinearVideoPipeline):
 
     async def determine_title(self, ctx: PipelineContext):
         """Step 3: Determine or generate video title."""
-        # Note: Swapped order with generate_content in base class call, 
-        # but in StandardPipeline original code, title was determined BEFORE narrations.
-        # However, LinearVideoPipeline defines generate_content BEFORE determine_title.
-        # This is fine as they are independent in StandardPipeline logic.
-        
-        title = ctx.params.get("title")
+        title = ctx.params.get("title") or ctx.title
         mode = ctx.params.get("mode", "generate")
         text = ctx.input_text
         
         if title:
             ctx.title = title
-            logger.info(f"   Title: '{title}' (user-specified)")
+            logger.info(f"   Title: '{title}' (determined)")
         else:
             self._report_progress(ctx.progress_callback, "generating_title", 0.01)
             if mode == "generate":
@@ -149,8 +169,43 @@ class StandardPipeline(LinearVideoPipeline):
                 ctx.title = await generate_title(self.llm, text, strategy="llm")
                 logger.info(f"   Title: '{ctx.title}' (LLM-generated)")
 
+        # Code-level deterministic reuse: sync title to platform metadata if already present
+        if ctx.title and ctx.platform_metadata:
+            for plat_dict in ctx.platform_metadata.values():
+                if isinstance(plat_dict, dict):
+                    plat_dict["title"] = ctx.title[:30]
+
+    async def generate_metadata(self, ctx: PipelineContext):
+        """Step 4: Generate target platform metadata based on script and title."""
+        pub_cfg = ctx.params.get("publishing") or ctx.params.get("publishing_config") or {}
+        if isinstance(pub_cfg, dict):
+            target_platform = pub_cfg.get("platform") or ctx.params.get("platform") or "douyin"
+        else:
+            target_platform = getattr(pub_cfg, "platform", "douyin")
+
+        # Reuse pre-generated metadata from generate_content if present
+        if ctx.platform_metadata and target_platform in ctx.platform_metadata:
+            meta_title = ctx.platform_metadata[target_platform].get("title", "")
+            logger.info(f"✅ Reusing pre-generated '{target_platform}' metadata: '{meta_title}'")
+            return
+
+        try:
+            self._report_progress(ctx.progress_callback, "generating_metadata", 0.10)
+            logger.info(f"Generating platform metadata for '{target_platform}'...")
+            
+            script_source = ctx.narrations if ctx.narrations else ctx.input_text
+            meta = await self.core.publishing.generate_platform_metadata(
+                platform=target_platform,
+                script=script_source,
+                title=ctx.title,
+            )
+            ctx.platform_metadata = {target_platform: meta.model_dump()}
+            logger.info(f"✅ Generated {target_platform} metadata: '{meta.title}'")
+        except Exception as e:
+            logger.warning(f"Metadata generation failed (non-fatal): {e}")
+
     async def plan_visuals(self, ctx: PipelineContext):
-        """Step 4: Generate image prompts or visual descriptions."""
+        """Step 5: Generate image prompts or visual descriptions."""
         # Detect template type to determine if media generation is needed
         frame_template = ctx.params.get("frame_template") or "1080x1920/default.html"
         
@@ -508,12 +563,37 @@ class StandardPipeline(LinearVideoPipeline):
             }
             
             # Save metadata
+            if ctx.platform_metadata:
+                metadata.setdefault("metadata", {}).setdefault("platform_metadata", {}).update(ctx.platform_metadata)
+
             await self.core.persistence.save_task_metadata(task_id, metadata)
             logger.info(f"💾 Saved task metadata: {task_id}")
             
             # Save storyboard
             await self.core.persistence.save_storyboard(task_id, storyboard)
             logger.info(f"💾 Saved storyboard: {task_id}")
+
+            # Auto-create PublishJobs if requested
+            pub_cfg = ctx.params.get("publishing") or ctx.params.get("publishing_config")
+            if pub_cfg and hasattr(self.core, "publishing") and self.core.publishing:
+                mode = pub_cfg.get("mode") if isinstance(pub_cfg, dict) else getattr(pub_cfg, "mode", "none")
+                account_ids = pub_cfg.get("account_ids", []) if isinstance(pub_cfg, dict) else getattr(pub_cfg, "account_ids", [])
+                platform = pub_cfg.get("platform", "douyin") if isinstance(pub_cfg, dict) else getattr(pub_cfg, "platform", "douyin")
+                sched_at = pub_cfg.get("scheduled_at") if isinstance(pub_cfg, dict) else getattr(pub_cfg, "scheduled_at", None)
+                meta_ov = pub_cfg.get("metadata_override") if isinstance(pub_cfg, dict) else getattr(pub_cfg, "metadata_override", None)
+
+                if mode in ["immediate", "scheduled"] and account_ids:
+                    try:
+                        jobs = await self.core.publishing.create_jobs_for_task(
+                            task_id=task_id,
+                            account_ids=account_ids,
+                            platform=platform,
+                            scheduled_at=sched_at if mode == "scheduled" else None,
+                            metadata_override=meta_ov,
+                        )
+                        logger.info(f"🚀 Auto-created {len(jobs)} publish job(s) for task {task_id} (mode={mode})")
+                    except Exception as pe:
+                        logger.warning(f"Auto-publishing job dispatch error (non-fatal): {pe}")
             
         except Exception as e:
             logger.error(f"Failed to persist task data: {e}")

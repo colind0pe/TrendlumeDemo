@@ -17,6 +17,8 @@ This is the entry point for the Streamlit multi-page application.
 Uses st.navigation to define pages and set the default page to Home.
 """
 
+# ruff: noqa: E402
+
 import sys
 from pathlib import Path
 
@@ -53,8 +55,14 @@ def main():
         icon="📁"
     )
     
+    publishing_page = st.Page(
+        "pages/3_📢_Publishing.py",
+        title="Publishing",
+        icon="📢"
+    )
+    
     # Set up navigation and run
-    pg = st.navigation([home_page, projects_page])
+    pg = st.navigation([home_page, projects_page, publishing_page])
     pg.run()
 
 

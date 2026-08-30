@@ -15,21 +15,43 @@ API Schemas (Pydantic models)
 """
 
 from api.schemas.base import BaseResponse, ErrorResponse
-from api.schemas.llm import LLMChatRequest, LLMChatResponse
-from api.schemas.tts import TTSSynthesizeRequest, TTSSynthesizeResponse
-from api.schemas.image import ImageGenerateRequest, ImageGenerateResponse
 from api.schemas.content import (
-    NarrationGenerateRequest,
-    NarrationGenerateResponse,
     ImagePromptGenerateRequest,
     ImagePromptGenerateResponse,
+    NarrationGenerateRequest,
+    NarrationGenerateResponse,
     TitleGenerateRequest,
     TitleGenerateResponse,
 )
+from api.schemas.image import ImageGenerateRequest, ImageGenerateResponse
+from api.schemas.llm import LLMChatRequest, LLMChatResponse
+from api.schemas.publishing import (
+    AccountCheckResponse,
+    BulkMatrixPublishRequest,
+    CredentialSetRequest,
+    ManualCookieImportRequest,
+    PlatformCapabilityResponse,
+    PublishExecuteResponse,
+    PublishingAnalyticsSummaryResponse,
+    PublishJobCreateRequest,
+    PublishJobResponse,
+    PublishJobUpdateRequest,
+    PublishQueueStatsResponse,
+    PublishTemplateCreateRequest,
+    PublishTemplateResponse,
+    QRCompleteRequest,
+    QRStartRequest,
+    QRStartResponse,
+    QRStatusResponse,
+    SocialAccountCreateRequest,
+    SocialAccountResponse,
+    SocialAccountUpdateRequest,
+)
+from api.schemas.tts import TTSSynthesizeRequest, TTSSynthesizeResponse
 from api.schemas.video import (
+    VideoGenerateAsyncResponse,
     VideoGenerateRequest,
     VideoGenerateResponse,
-    VideoGenerateAsyncResponse,
 )
 
 __all__ = [
@@ -56,5 +78,27 @@ __all__ = [
     "VideoGenerateRequest",
     "VideoGenerateResponse",
     "VideoGenerateAsyncResponse",
+    # Publishing
+    "PlatformCapabilityResponse",
+    "SocialAccountCreateRequest",
+    "SocialAccountUpdateRequest",
+    "SocialAccountResponse",
+    "AccountCheckResponse",
+    "CredentialSetRequest",
+    "PublishJobCreateRequest",
+    "PublishJobUpdateRequest",
+    "PublishJobResponse",
+    "PublishExecuteResponse",
+    "PublishQueueStatsResponse",
+    "PublishTemplateCreateRequest",
+    "PublishTemplateResponse",
+    "BulkMatrixPublishRequest",
+    "PublishingAnalyticsSummaryResponse",
+    # Auth
+    "QRStartRequest",
+    "QRStartResponse",
+    "QRStatusResponse",
+    "QRCompleteRequest",
+    "ManualCookieImportRequest",
 ]
 

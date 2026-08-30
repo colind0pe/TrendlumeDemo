@@ -94,6 +94,10 @@ class StandardPipelineUI(PipelineUI):
             # Content input (mode, text, title, n_scenes)
             content_params = render_content_input(initial_values=applied_template)
             
+            # Publishing Configuration
+            from web.components.publishing_config import render_publishing_config
+            pub_params = render_publishing_config(trendlume, initial_values=applied_template)
+
             # BGM selection (bgm_path, bgm_volume)
             bgm_params = render_bgm_section(initial_values=applied_template)
             
@@ -117,6 +121,7 @@ class StandardPipelineUI(PipelineUI):
                 "pipeline": self.name,
                 "project_id": selected_project_id,
                 **content_params,
+                **pub_params,
                 **bgm_params,
                 **style_params
             }

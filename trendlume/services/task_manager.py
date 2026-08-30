@@ -17,7 +17,7 @@ Provides business logic for individual Task operations, decoupled from Projects.
 Core service alongside ProjectManager and PersistenceService.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -32,6 +32,7 @@ class TaskManager:
     Provides business logic for:
     - Task retrieval and conversion to Task models
     - Detailed task inspection (metadata + storyboard)
+    - Task listing and filtering
     - Paginated listing and filtering
     - Task deletion (clean filesystem removal)
     - Task parameter duplication
@@ -46,6 +47,33 @@ class TaskManager:
             persistence: PersistenceService instance
         """
         self.persistence = persistence
+
+    async def list_tasks(
+        self,
+        status: Optional[str] = None,
+        project_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Task]:
+        """
+        List tasks as Task model instances
+        
+        Args:
+            status: Filter by status (optional)
+            project_id: Filter by project ID (optional)
+            limit: Maximum number of tasks to return
+            offset: Number of tasks to skip
+            
+        Returns:
+            List of Task instances
+        """
+        summaries = await self.persistence.list_tasks(
+            status=status,
+            project_id=project_id,
+            limit=limit,
+            offset=offset,
+        )
+        return [Task.from_metadata_dict(s) for s in summaries]
 
     async def get_task(self, task_id: str) -> Optional[Task]:
         """

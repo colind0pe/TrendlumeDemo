@@ -27,27 +27,27 @@ from typing import List, Optional, Dict
 IMAGE_STYLE_PRESETS: Dict[str, Dict[str, str]] = {
     "stick_figure": {
         "name": "简约火柴人",
-        "description": "Minimalist black ink stick figure line art, clean pure white background, hand-drawn sketch style, fully framed subject, zero clutter, no text",
+        "description": "Minimalist black ink stick figure line art, clean pure white background, hand-drawn sketch style, fully framed subject, zero clutter",
         "use_case": "General explainer, conceptual, simple and intuitive"
     },
     "minimalist_line_art": {
         "name": "简笔画",
-        "description": "Universal minimalist line art illustration, clean hand-drawn fluid contours, subtle flat color accents, strictly 1-3 focal elements, ample negative space, clear margins, no text",
+        "description": "Universal minimalist line art illustration, clean hand-drawn fluid contours, subtle flat color accents, strictly 1-3 focal elements, ample negative space, clear margins",
         "use_case": "Versatile explainer, business insights, science concepts, daily life philosophy, emotional stories"
     },
     "chinese_ink": {
         "name": "中国水墨画",
-        "description": "Traditional Chinese ink wash painting aesthetic, guochao style, elegant fluid brush strokes, poetic composition, ample harmonious negative space (留白), atmospheric mist, zen tranquility, no text",
+        "description": "Traditional Chinese ink wash painting aesthetic, guochao style, elegant fluid brush strokes, poetic composition, ample harmonious negative space (留白), atmospheric mist, zen tranquility",
         "use_case": "Eastern culture, humanities, Zen, philosophy, traditional history"
     },
     "cinematic_real": {
         "name": "电影写实",
-        "description": "Cinematic 8k photograph, 35mm lens, shallow depth of field separating centered subject from soft uncluttered backdrop, dramatic chiaroscuro lighting, rich textures, no text",
+        "description": "Cinematic 8k photograph, shallow depth of field separating centered subject from soft uncluttered backdrop, dramatic chiaroscuro lighting, rich textures",
         "use_case": "Realistic storytelling, historical, business, dramatic scenarios"
     },
     "animation": {
         "name": "动画",
-        "description": "Vibrant clean animation art style, well-defined character silhouette centered in frame, smooth lighting, harmonious color palette, neat organized backdrop, no text",
+        "description": "Vibrant clean animation art style, well-defined character silhouette centered in frame, smooth lighting, harmonious color palette, neat organized backdrop",
         "use_case": "Engaging storytelling, warm narratives, creative explainers, accessible concepts"
     },
 }

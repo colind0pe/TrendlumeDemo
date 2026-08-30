@@ -31,17 +31,19 @@ Services:
 """
 
 from trendlume.services.comfy_base_service import ComfyBaseService
-from trendlume.services.llm_service import LLMService
-from trendlume.services.tts_service import TTSService
-from trendlume.services.media import MediaService
-from trendlume.services.video import VideoService
 from trendlume.services.frame_processor import FrameProcessor
-from trendlume.services.persistence import PersistenceService
-from trendlume.services.task_manager import TaskManager
 from trendlume.services.history_manager import HistoryManager
-from trendlume.services.project_manager import ProjectManager
 from trendlume.services.history_migration import HistoryMigrationService, MigrationResult
+from trendlume.services.llm_service import LLMService
+from trendlume.services.media import MediaService
+from trendlume.services.persistence import PersistenceService
+from trendlume.services.project_manager import ProjectManager
+from trendlume.services.publishing_persistence import PublishingPersistenceService
+from trendlume.services.publishing_service import PublishingService
+from trendlume.services.task_manager import TaskManager
 from trendlume.services.task_scheduler import TaskScheduler
+from trendlume.services.tts_service import TTSService
+from trendlume.services.video import VideoService
 
 # Backward compatibility alias
 ImageService = MediaService
@@ -61,5 +63,7 @@ __all__ = [
     "HistoryMigrationService",
     "MigrationResult",
     "TaskScheduler",
+    "PublishingPersistenceService",
+    "PublishingService",
 ]
 

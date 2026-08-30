@@ -71,19 +71,22 @@ RESEARCH_SECTION_TEMPLATE = """# External Research Context (Reference Data Only)
 
 TOPIC_NARRATION_TEMPLATE = """# Mandatory Language Rule (CRITICAL & HIGHEST PRIORITY)
 First, identify the exact language of the input topic.
-You MUST write and output ALL {n_storyboard} storyboard narrations in the EXACT SAME LANGUAGE as the input topic.
-- If the topic is in Chinese (中文), you MUST output all narrations in 100% fluent, natural Chinese (严禁输出英文).
-- If the topic is in English, you MUST output all narrations in English.
+You MUST write and output ALL {n_storyboard} storyboard narrations, video title, and publishing metadata in the EXACT SAME LANGUAGE as the input topic.
+- If the topic is in Chinese (中文), you MUST output all narrations, title, and metadata in 100% fluent, natural Chinese (严禁输出英文).
+- If the topic is in English, you MUST output all content in English.
 
 {system_role}
 
 # Core Task
-Create a scene-by-scene narration script for {n_storyboard} video storyboards based on the input topic.
-Each narration will be spoken by TTS (text-to-speech) to produce the voiceover for the corresponding video frame.
+Create a unified, highly consistent short video content package based on the input topic:
+1. **Video Title (title)**: Catchy, suspenseful, and curiosity-inducing video title (strictly <= 30 characters, no punctuation at the end).
+2. **Storyboard Narrations (narrations)**: Scene-by-scene narration script for {n_storyboard} video storyboards spoken by TTS voiceover.
+3. **Platform Publishing Metadata (metadata)**: High-converting publishing metadata (engaging post description, 3-8 hashtags, declaration) tailored for {target_platform} publishing.
 
 # Input Topic
 {topic}
 
+{title_section}
 {research_section}
 {strategy_section}
 {custom_prompt_section}
@@ -105,22 +108,33 @@ Each narration will be spoken by TTS (text-to-speech) to produce the voiceover f
 - **Narrative Flow & Smooth Transitions**: Ensure the entire script flows naturally as one coherent monologue. The storyboards should feel like progressive beats of a single story rather than disconnected fragments.
 - **Prohibitions**: No markdown headers, no scene labels (like 'Scene 1:') in narration text, no URLs, no emoji in voiceover, no numbering.
 
+# Platform Publishing Metadata Requirements ({target_platform})
+- **description**: Engaging caption summarizing core takeaway + ending with an interactive question or call to like/comment (1-3 punchy sentences).
+- **tags**: Array of 3-8 high-traffic, relevant topic tags without '#' symbol.
+- **declaration**: Appropriate declaration (e.g. "个人观点，仅供参考").
+
 # Output Format
 Strictly output in the following JSON format, without any surrounding commentary:
 
 ```json
 {{
+  "title": "Viral Video Title (<=30 chars)",
   "narrations": [
     "First narration (Scene 1: 3-Second Golden Hook)",
     "Second narration (Scene 2: Problem & Core Mechanism)",
     "Third narration (Scene 3: Deep Insight & Concrete Analogy)",
     "Fourth narration (Scene 4: Real-world Case & Cognitive Payoff)",
     "Fifth narration (Scene 5: Summary + Natural Follow CTA in the last 1-2 sentences)"
-  ]
+  ],
+  "metadata": {{
+    "description": "Engaging post caption summarizing the video and prompting comment/interaction.",
+    "tags": ["TopicTag1", "TopicTag2", "TopicTag3"],
+    "declaration": "个人观点，仅供参考"
+  }}
 }}
 ```
 
-**CRITICAL**: Return ONLY the valid JSON object containing exactly {n_storyboard} string elements in the "narrations" array.
+**CRITICAL**: Return ONLY the valid JSON object containing "title", "narrations" (exactly {n_storyboard} string elements), and "metadata".
 """
 
 
@@ -135,10 +149,12 @@ def build_topic_narration_prompt(
     custom_prompt: str = "",
     custom_system_prompt: str = "",
     research_context: Optional[str] = None,
+    title: Optional[str] = None,
+    target_platform: str = "douyin",
 ) -> str:
     """
     Build topic narration prompt with autonomous topic analysis, auto-genre, golden hook selection,
-    and optional web research context.
+    optional web research context, video title, and platform publishing metadata generation.
     
     Args:
         topic: Topic or theme
@@ -150,6 +166,8 @@ def build_topic_narration_prompt(
         custom_prompt: Additional user guidance or specific requirements
         custom_system_prompt: Custom system role override
         research_context: Optional web research background material (string or formatted text)
+        title: Optional user-specified video title
+        target_platform: Target publishing platform (default: 'douyin')
     
     Returns:
         Formatted prompt
@@ -168,6 +186,12 @@ def build_topic_narration_prompt(
             sections.append(f"# 3-Second Golden Hook Strategy ({hook_type})\n{HOOK_INSTRUCTIONS[hook_type]}")
         strategy_section = "\n\n".join(sections)
         
+    # User title section if provided
+    if title and title.strip():
+        title_section = f"# User Specified Title (Must align content with this title)\nTitle: {title.strip()}\n"
+    else:
+        title_section = ""
+
     # Custom user prompt section
     if custom_prompt and custom_prompt.strip():
         custom_prompt_section = f"# Additional User Requirements\n{custom_prompt.strip()}\n"
@@ -191,5 +215,7 @@ def build_topic_narration_prompt(
         strategy_section=strategy_section,
         custom_prompt_section=custom_prompt_section,
         research_section=research_section,
+        title_section=title_section,
+        target_platform=target_platform,
     ).strip()
 

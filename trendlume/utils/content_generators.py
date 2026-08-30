@@ -17,11 +17,25 @@ Pure/stateless functions for generating content using LLM.
 These functions are reusable across different pipelines.
 """
 
+from dataclasses import dataclass, field
 import json
 import re
-from typing import List, Optional, Literal, Any, Callable
+from typing import List, Optional, Literal, Any, Callable, Dict, Union
 
 from loguru import logger
+
+from trendlume.models.metadata import DouyinConstraints
+from trendlume.models.publishing import PlatformName
+
+
+@dataclass
+class GeneratedContent:
+    """
+    Unified short video content bundle containing narrations, title, and platform publishing metadata.
+    """
+    title: str = ""
+    narrations: List[str] = field(default_factory=list)
+    metadata: Optional[Dict[str, Any]] = None
 
 
 _CODE_FENCE_RE = re.compile(
@@ -121,10 +135,13 @@ async def generate_narrations_from_topic(
     custom_system_prompt: str = "",
     research_service: Optional[Any] = None,
     enable_research: Optional[bool] = None,
-) -> List[str]:
+    title: Optional[str] = None,
+    target_platform: str = PlatformName.DOUYIN,
+    return_full: bool = False,
+) -> Union[List[str], GeneratedContent]:
     """
     Generate narrations from topic using LLM with 3-second golden hook, multi-genre support,
-    and optional web research context.
+    optional web research context, and unified title/publishing metadata generation.
     
     Args:
         llm_service: LLM service instance
@@ -132,42 +149,40 @@ async def generate_narrations_from_topic(
         n_scenes: Number of narrations to generate
         min_words: Minimum narration length
         max_words: Maximum narration length
-        genre: Track style ('general', 'science_tech', 'business_wealth', 'emotion_growth', 'culture_history', 'humor_meme', 'product_review')
-        hook_type: Golden hook strategy ('bold_claim', 'curiosity_gap', 'mistake_warning', 'story_twist', 'pain_point')
-        custom_prompt: Additional user guidance or specific requirements
-        custom_system_prompt: Custom system role override
-        research_service: Optional ResearchService instance (must be pre-created)
-        enable_research: Optional override to enable/disable research (defaults to config)
+        genre: Track style (default: 'auto')
+        hook_type: Optional golden hook strategy
+        custom_prompt: Additional user requirements
+        custom_system_prompt: Custom system prompt override
+        research_service: Optional research service instance
+        enable_research: Optional override to enable/disable research
+        title: Optional user-specified video title
+        target_platform: Target publishing platform (default: 'douyin')
+        return_full: If True, returns GeneratedContent bundle (title, narrations, metadata). Defaults to False (List[str]).
     
     Returns:
-        List of narration texts
+        List of narration texts or GeneratedContent bundle if return_full is True
     """
     from trendlume.prompts import build_topic_narration_prompt
     
-    logger.info(f"Generating {n_scenes} narrations from topic: '{topic}' (genre={genre}, hook={hook_type})")
+    logger.info(f"Generating {n_scenes} narrations from topic '{topic[:30]}...' (genre={genre}, hook={hook_type}, platform={target_platform})")
     
-    # 1. Execute Web Research if a research_service was provided and enabled
+    # 1. Execute Web Research if research_service is provided and enabled
     research_context_text = None
-    if research_service is not None:
+    if research_service is not None and research_service.is_enabled(override=enable_research):
         try:
-            if research_service.is_enabled(override=enable_research):
-                logger.info(f"🔍 Performing web research for topic: '{topic}'")
-                context = await research_service.conduct_research(
-                    topic=topic,
-                    llm_service=llm_service,
-                    enable_override=enable_research,
-                )
-                if context and not context.is_empty:
-                    research_context_text = context.formatted_text
-                    logger.info(f"✅ Web research completed ({len(context.results)} sources found)")
-                else:
-                    logger.info("ℹ️ Web research completed with no additional context")
+            logger.info("Conducting background research for narration enrichment...")
+            ctx = await research_service.conduct_research(
+                topic=topic,
+                llm_service=llm_service,
+                enable_override=enable_research,
+            )
+            if ctx and not ctx.is_empty:
+                research_context_text = ctx.formatted_text
+                logger.info(f"✅ Web research completed ({len(ctx.results)} sources found)")
         except Exception as e:
-            logger.warning(f"Research step failed, proceeding with standard generation: {e}")
+            logger.warning(f"Web research failed: {e}. Proceeding without research context.")
             research_context_text = None
-
-
-    # 2. Build prompt
+    
     prompt = build_topic_narration_prompt(
         topic=topic,
         n_storyboard=n_scenes,
@@ -178,6 +193,8 @@ async def generate_narrations_from_topic(
         custom_prompt=custom_prompt,
         custom_system_prompt=custom_system_prompt,
         research_context=research_context_text,
+        title=title,
+        target_platform=target_platform,
     )
     
     response = await llm_service(
@@ -203,7 +220,24 @@ async def generate_narrations_from_topic(
     elif len(narrations) < n_scenes:
         raise ValueError(f"Expected {n_scenes} narrations, got only {len(narrations)}")
     
-    logger.info(f"Generated {len(narrations)} narrations successfully")
+    resolved_title = title or result.get("title") or (result.get("metadata", {}).get("title") if isinstance(result.get("metadata"), dict) else "") or ""
+    resolved_title = str(resolved_title).strip().strip('"\'').rstrip('.,!?;:\'"')
+    if len(resolved_title) > DouyinConstraints.MAX_TITLE_LENGTH:
+        resolved_title = resolved_title[:DouyinConstraints.MAX_TITLE_LENGTH].rstrip('.,!?;:\'"')
+    
+    meta_dict = result.get("metadata")
+    if isinstance(meta_dict, dict):
+        # Code-level deterministic reuse: platform metadata title always equals resolved_title
+        meta_dict["title"] = resolved_title
+    
+    logger.info(f"Generated {len(narrations)} narrations successfully (title='{resolved_title}')")
+    
+    if return_full:
+        return GeneratedContent(
+            title=resolved_title,
+            narrations=narrations,
+            metadata=meta_dict if isinstance(meta_dict, dict) else None,
+        )
     return narrations
 
 
@@ -216,9 +250,13 @@ async def generate_narrations_from_content(
     max_words: int = 20,
     genre: str = "general",
     custom_prompt: str = "",
-) -> List[str]:
+    title: Optional[str] = None,
+    target_platform: str = PlatformName.DOUYIN,
+    return_full: bool = False,
+) -> Union[List[str], GeneratedContent]:
     """
-    Generate narrations from user-provided content using LLM with retention-optimized structuring.
+    Generate narrations from user-provided content using LLM with retention-optimized structuring,
+    video title, and unified publishing metadata.
     
     Args:
         llm_service: LLM service instance
@@ -228,13 +266,16 @@ async def generate_narrations_from_content(
         max_words: Maximum narration length
         genre: Genre style hint (default: 'general')
         custom_prompt: Additional user guidance or specific requirements
+        title: Optional user-specified video title
+        target_platform: Target publishing platform (default: 'douyin')
+        return_full: If True, returns GeneratedContent bundle (title, narrations, metadata). Defaults to False (List[str]).
     
     Returns:
-        List of narration texts
+        List of narration texts or GeneratedContent bundle if return_full is True
     """
     from trendlume.prompts import build_content_narration_prompt
     
-    logger.info(f"Generating {n_scenes} narrations from content ({len(content)} chars)")
+    logger.info(f"Generating {n_scenes} narrations from content ({len(content)} chars, platform={target_platform})")
     
     prompt = build_content_narration_prompt(
         content=content,
@@ -243,6 +284,8 @@ async def generate_narrations_from_content(
         max_words=max_words,
         genre=genre,
         custom_prompt=custom_prompt,
+        title=title,
+        target_platform=target_platform,
     )
     
     response = await llm_service(
@@ -266,8 +309,26 @@ async def generate_narrations_from_content(
     elif len(narrations) < n_scenes:
         raise ValueError(f"Expected {n_scenes} narrations, got only {len(narrations)}")
     
-    logger.info(f"Generated {len(narrations)} narrations successfully")
+    resolved_title = title or result.get("title") or (result.get("metadata", {}).get("title") if isinstance(result.get("metadata"), dict) else "") or ""
+    resolved_title = str(resolved_title).strip().strip('"\'').rstrip('.,!?;:\'"')
+    if len(resolved_title) > DouyinConstraints.MAX_TITLE_LENGTH:
+        resolved_title = resolved_title[:DouyinConstraints.MAX_TITLE_LENGTH].rstrip('.,!?;:\'"')
+    
+    meta_dict = result.get("metadata")
+    if isinstance(meta_dict, dict):
+        # Code-level deterministic reuse: platform metadata title always equals resolved_title
+        meta_dict["title"] = resolved_title
+    
+    logger.info(f"Generated {len(narrations)} narrations successfully (title='{resolved_title}')")
+    
+    if return_full:
+        return GeneratedContent(
+            title=resolved_title,
+            narrations=narrations,
+            metadata=meta_dict if isinstance(meta_dict, dict) else None,
+        )
     return narrations
+
 
 
 async def split_narration_script(

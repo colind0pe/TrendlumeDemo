@@ -161,6 +161,18 @@ def render_grid_task_card(task: dict, trendlume):
         else:
             st.caption(f"🕒 {format_datetime(created_at)}")
 
+        pub_status = task.get("metadata", {}).get("publishing_status")
+        if pub_status:
+            pub_badge_map = {
+                "published": "🟢 抖音已发布",
+                "publishing": "🔄 抖音发布中",
+                "queued": "🟡 抖音排队中",
+                "scheduled": "🕒 抖音已定时",
+                "failed": "🔴 抖音发布失败",
+            }
+            badge_label = pub_badge_map.get(pub_status, f"📢 {pub_status}")
+            st.caption(f"📢 **发布:** `{badge_label}`")
+
         st.divider()
 
         # 4. Action Buttons (Row 1: Primary Actions)
@@ -395,6 +407,10 @@ def render_task_detail_view(task_id: str, project_id: str, trendlume):
                     mime="video/mp4",
                     use_container_width=True,
                 )
+
+            if st.button("📢 发布至社交平台 (Publish to Social)", key=f"pub_task_btn_{task_id}", use_container_width=True):
+                st.session_state["publish_preselect_task_id"] = task_id
+                st.switch_page("pages/3_📢_Publishing.py")
         else:
             if status == TaskStatus.RUNNING:
                 st.info("⏳ 视频正在生成中，成片渲染完成后将自动显示在此处。")
@@ -421,6 +437,10 @@ def render_task_detail_view(task_id: str, project_id: str, trendlume):
                     if ex_path and os.path.exists(ex_path):
                         st.video(ex_path)
                     st.divider()
+
+    # Platform Metadata & Publishing Status Section
+    from web.components.task_publishing import render_task_publishing_section
+    render_task_publishing_section(trendlume, task_id, key_prefix="proj_detail_")
 
 
 # ============================================================================
@@ -612,11 +632,13 @@ def render_new_task_generation_view(project_id: str, trendlume: Any):
     # 3. Three-Column Generation Layout (Reusing components)
     col_left, col_mid, col_right = st.columns([1, 1, 1])
 
-    # Left Column: Project Attribution & Content Input & BGM
+    # Left Column: Project Attribution & Content Input & Publishing Config & BGM
     with col_left:
         with st.container(border=True):
             render_project_selector(trendlume, default_project_id=project.project_id, disabled=True)
         content_params = render_content_input(initial_values=initial_cfg, key_prefix="pnt_")
+        from web.components.publishing_config import render_publishing_config
+        pub_params = render_publishing_config(trendlume, initial_values=initial_cfg, key_prefix="pnt_")
         bgm_params = render_bgm_section(key_prefix="pnt_", initial_values=initial_cfg)
 
     # Middle Column: Style Configuration
@@ -652,6 +674,7 @@ def render_new_task_generation_view(project_id: str, trendlume: Any):
                 "pipeline": "standard",
                 "project_id": project.project_id,
                 **content_params,
+                **pub_params,
                 **bgm_params,
                 **style_params,
             }
